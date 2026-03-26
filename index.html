@@ -980,60 +980,44 @@ async function generateRequest() {
   setStatus('generating…', '#d29922');
 
   try {
-    const requestUrl = document.getElementById('request-url').value.trim();
     const verifierId = document.getElementById('verifier-id').value.trim();
     const docTypeSel = document.getElementById('doc-type').value;
     const docType = docTypeSel === 'custom' ? document.getElementById('custom-doc-type').value.trim() : docTypeSel;
     const includeMdl = document.getElementById('include-mdl').checked;
 
-    const photoidNs = docType === 'org.iso.23220.photoid.1' ? 'org.iso.23220.photoid.1' : 'org.iso.18013.5.1';
-    const selectedPhotoid = getCheckedElements('photoid-elements');
-    const selectedMdl = includeMdl ? getCheckedElements('mdl-elements') : null;
+    const photoidNs = docType === 'org.iso.23220.photoid.1' ? 'org.iso.23220.1' : 'org.iso.18013.5.1';
+    const selectedPhotoid = Object.keys(getCheckedElements('photoid-elements'));
+    const selectedMdl = includeMdl ? Object.keys(getCheckedElements('mdl-elements')) : [];
 
-    log('info', `Generating DeviceRequest for ${docType}`);
-    log('info', `Elements: ${Object.keys(selectedPhotoid).join(', ')}`);
+    log('info', `Creating server session for ${docType}`);
+    log('info', `Elements: ${selectedPhotoid.join(', ')}`);
 
-    // 1. Generate ephemeral keypair
-    const keyPair = await generateEphemeralKeypair();
-    state.readerPrivKey = keyPair.privateKey;
-    state.readerPubKey = keyPair.publicKey;
-    log('ok', 'Ephemeral P-256 keypair generated');
+    const res = await fetch('/mdoc/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verifier_id: verifierId,
+        doc_type: docType,
+        include_mdl: includeMdl,
+        photoid_elements: selectedPhotoid,
+        mdl_elements: selectedMdl,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Session creation failed: ${res.status}`);
+    }
+    const payload = await res.json();
+    const requestUrl = payload.request_url;
+    const mdocUri = payload.mdoc_uri;
+    const reEngBytes = Uint8Array.from((payload.reader_engagement_hex.match(/.{2}/g) || []).map(h => parseInt(h, 16)));
 
-    // 2. Build ItemsRequest payload
-    const nsMap = new Map([[photoidNs, selectedPhotoid]]);
-    if (includeMdl && selectedMdl) nsMap.set('org.iso.18013.5.1', selectedMdl);
-
-    const nonceB64 = btoa(String.fromCharCode(...state.nonce));
-    const requestInfo = {
-      verifier: verifierId,
-      created: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
-      nonce: nonceB64,
-    };
-
-    const itemsRequestMap = new Map([
-      ['docType', docType],
-      ['nameSpaces', nsMap],
-      ['requestInfo', requestInfo],
-    ]);
-    const itemsRequestBytes = encodeCborWithTags(itemsRequestMap);
-    state.deviceRequestPayload = itemsRequestBytes;
-    log('ok', `ItemsRequest encoded: ${itemsRequestBytes.length} bytes`);
-
-    // 3. Sign (COSE_Sign1)
-    const readerAuth = await signCoseSign1(itemsRequestBytes, state.readerPrivKey);
-    log('ok', `COSE_Sign1 signed: ${readerAuth.length} bytes`);
-
-    // 4. Build ReaderEngagement
-    const coseKey = await exportPublicKeyCose(state.readerPubKey);
-    const readerEngagement = buildReaderEngagement(coseKey, requestUrl);
-    const reEngBytes = encodeCborWithTags(readerEngagement);
     state.readerEngagementBytes = reEngBytes;
-    log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
-
-    // 5. Build mdoc:// URI from ReaderEngagement
-    const b64 = btoa(String.fromCharCode(...reEngBytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    const mdocUri = `mdoc://${b64}`;
     state.mdocUri = mdocUri;
+    state.sessionNonce = null;
+    document.getElementById('request-url').value = requestUrl;
+    document.getElementById('endpoint-bar-url').value = requestUrl;
+    log('ok', `Session created: ${payload.session_id}`);
+    log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
     log('ok', `mdoc:// URI: ${mdocUri.length} chars`);
 
     // 6. Render QR
@@ -1049,24 +1033,20 @@ async function generateRequest() {
     // 8. Request summary
     renderRequestSummary({
       docType, requestUrl, verifierId,
-      elements: Object.keys(selectedPhotoid),
-      mdlElements: selectedMdl ? Object.keys(selectedMdl) : [],
+      elements: selectedPhotoid,
+      mdlElements: selectedMdl,
       reEngSize: reEngBytes.length,
-      itemsReqSize: itemsRequestBytes.length,
-      readerAuthSize: readerAuth.length,
+      itemsReqSize: 0,
+      readerAuthSize: 0,
       ns: photoidNs,
     });
 
-    // Update session state
-    const rawPub = await crypto.subtle.exportKey('raw', state.readerPubKey);
-    const pubHex = Array.from(new Uint8Array(rawPub)).map(b => b.toString(16).padStart(2,'0')).join('');
-    state.sessionNonce = nonceB64;
     updateSessionTable({
       docType, requestUrl, verifierId,
-      'reader pub key (x962)': pubHex.slice(0, 32) + '…',
-      'nonce (b64)': nonceB64,
+      'reader pub key (x962)': payload.reader_public_key_hex.slice(0, 32) + '…',
+      'session id': payload.session_id,
       'readerEngagement size': reEngBytes.length + ' bytes',
-      'itemsRequest size': itemsRequestBytes.length + ' bytes',
+      'backend flow': 'server-owned session',
     });
 
     setStatus('request ready', '#3fb950');
