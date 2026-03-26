@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO 18013-7 Verifier Tester</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --bg4: #30363d;
+    --border: #30363d;
+    --border2: #484f58;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --accent: #58a6ff;
+    --accent2: #1f6feb;
+    --green: #3fb950;
+    --green-bg: #0d1f0e;
+    --amber: #d29922;
+    --amber-bg: #1f1a0e;
+    --red: #f85149;
+    --red-bg: #1f0d0d;
+    --purple: #a371f7;
+    --purple-bg: #170f2a;
+    --teal: #39d353;
+    --mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    --sans: -apple-system, 'Segoe UI', sans-serif;
+    --radius: 6px;
+    --radius-lg: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+  header .logo {
+    display: flex; align-items: center; gap: 8px;
+  }
+  header .logo svg { width: 22px; height: 22px; }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  header .version {
+    font-size: 11px; background: var(--bg3); border: 1px solid var(--border);
+    padding: 2px 7px; border-radius: 20px; color: var(--text2);
+    margin-left: 4px;
+  }
+  header .spacer { flex: 1; }
+  header .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+  header .status-label { font-size: 12px; color: var(--text2); }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    height: calc(100vh - 57px);
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  /* ── Forms ── */
+  label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  input[type=text], input[type=url], textarea, select {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius); padding: 7px 10px;
+    font-size: 13px; font-family: inherit; outline: none;
+    transition: border-color .15s;
+  }
+  input[type=text]:focus, input[type=url]:focus, textarea:focus, select:focus {
+    border-color: var(--accent2);
+  }
+  textarea { resize: vertical; font-family: var(--mono); font-size: 12px; }
+
+  /* ── Checkboxes ── */
+  .checkbox-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+  }
+  .checkbox-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; border-radius: var(--radius);
+    background: var(--bg3); border: 1px solid var(--border);
+    cursor: pointer; transition: border-color .15s;
+  }
+  .checkbox-item:hover { border-color: var(--border2); }
+  .checkbox-item input[type=checkbox] {
+    width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer;
+  }
+  .checkbox-item span { font-size: 11px; font-family: var(--mono); color: var(--text2); }
+  .checkbox-item.checked { border-color: var(--accent2); background: #0d1f35; }
+  .checkbox-item.checked span { color: var(--accent); }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: var(--radius);
+    border: 1px solid var(--border2); background: var(--bg3);
+    color: var(--text); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg4); border-color: var(--text3); }
+  .btn:active { transform: scale(0.98); }
+  .btn.primary {
+    background: var(--accent2); border-color: var(--accent2); color: #fff;
+    font-weight: 600; width: 100%; justify-content: center;
+  }
+  .btn.primary:hover { background: #388bfd; }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  .btn.danger { border-color: var(--red); color: var(--red); }
+  .btn.danger:hover { background: var(--red-bg); }
+
+  /* ── Main content ── */
+  .content {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    padding: 0 20px;
+    position: sticky; top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .tab {
+    padding: 12px 16px; font-size: 13px; font-weight: 500;
+    color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .15s; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Tab panels ── */
+  .tab-panel { display: none; flex: 1; padding: 20px; }
+  .tab-panel.active { display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg3);
+  }
+  .card-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .card-body { padding: 16px; }
+
+  /* ── QR ── */
+  #qr-container {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    padding: 24px;
+  }
+  #qr-box {
+    background: #fff; padding: 16px; border-radius: 8px;
+    min-width: 200px; min-height: 200px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #qr-box .placeholder {
+    color: #999; font-size: 13px; text-align: center;
+  }
+  .uri-display {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--text2);
+    word-break: break-all; width: 100%; position: relative;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+  }
+
+  /* ── CBOR Inspector ── */
+  .cbor-tree {
+    font-family: var(--mono); font-size: 12px; line-height: 1.8;
+    overflow-x: auto;
+  }
+  .cbor-key { color: #79c0ff; }
+  .cbor-str { color: #a5d6ff; }
+  .cbor-bytes { color: #ffa657; }
+  .cbor-num { color: #79c0ff; }
+  .cbor-bool { color: var(--purple); }
+  .cbor-tag { color: var(--text3); }
+  .cbor-indent { padding-left: 18px; border-left: 1px solid var(--border); margin-left: 4px; }
+
+  /* ── Response panel ── */
+  .response-meta {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 14px;
+  }
+  .meta-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+  }
+  .meta-card .label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
+  .meta-card .value { font-size: 20px; font-weight: 600; }
+  .meta-card .value.ok { color: var(--green); }
+  .meta-card .value.warn { color: var(--amber); }
+  .meta-card .value.err { color: var(--red); }
+
+  .field-table { width: 100%; border-collapse: collapse; }
+  .field-table th {
+    text-align: left; font-size: 11px; color: var(--text3);
+    font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--border);
+  }
+  .field-table td {
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    font-size: 12px; vertical-align: top;
+  }
+  .field-table tr:last-child td { border-bottom: none; }
+  .field-table td:first-child { font-family: var(--mono); color: var(--accent); font-size: 11px; }
+  .field-table td:nth-child(2) { color: var(--text2); }
+  .field-table td:last-child { color: var(--text); word-break: break-all; }
+
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 20px;
+    letter-spacing: .4px;
+  }
+  .badge.ok { background: var(--green-bg); color: var(--green); border: 1px solid #1a4a1e; }
+  .badge.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid #3d2e0a; }
+  .badge.err { background: var(--red-bg); color: var(--red); border: 1px solid #3d1515; }
+  .badge.info { background: #0d1f35; color: var(--accent); border: 1px solid #1a3a5e; }
+
+  /* ── Hex dump ── */
+  .hex-dump {
+    font-family: var(--mono); font-size: 11px; line-height: 1.8;
+    color: var(--text2); overflow-x: auto; white-space: pre;
+    background: var(--bg3); border-radius: var(--radius);
+    padding: 12px; max-height: 320px; overflow-y: auto;
+  }
+  .hex-dump .addr { color: var(--text3); margin-right: 12px; }
+  .hex-dump .hex { color: #ffa657; }
+  .hex-dump .ascii { color: var(--text2); margin-left: 12px; }
+
+  /* ── Log ── */
+  .log {
+    font-family: var(--mono); font-size: 12px; line-height: 1.8;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px;
+    max-height: 200px; overflow-y: auto; color: var(--text2);
+  }
+  .log-line { display: flex; gap: 10px; }
+  .log-line .ts { color: var(--text3); flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+  .log-line.info .msg { color: var(--text); }
+  .log-line.ok .msg { color: var(--green); }
+  .log-line.err .msg { color: var(--red); }
+  .log-line.warn .msg { color: var(--amber); }
+
+  /* ── Misc ── */
+  .empty-state {
+    text-align: center; padding: 40px 20px; color: var(--text3);
+  }
+  .empty-state .icon { font-size: 32px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13px; }
+
+  details > summary {
+    cursor: pointer; list-style: none; color: var(--text2);
+    font-size: 12px; padding: 4px 0;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: '▸ '; color: var(--text3); }
+  details[open] > summary::before { content: '▾ '; }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--text2); padding: 4px 0;
+  }
+  .toggle { display: flex; align-items: center; gap: 4px; }
+  input[type=checkbox].toggle-cb { accent-color: var(--accent); width: 14px; height: 14px; }
+
+  .divider { border: none; border-top: 1px solid var(--border); }
+  .gap-sm { display: flex; flex-direction: column; gap: 8px; }
+
+  .nonce-display {
+    font-family: var(--mono); font-size: 11px; color: var(--text3);
+    background: var(--bg3); border: 1px solid var(--border);
+    padding: 4px 8px; border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    aside { border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
+    main { height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="20" height="20" rx="4" stroke="#58a6ff" stroke-width="1.5"/>
+      <rect x="5" y="5" width="5" height="5" fill="#58a6ff"/>
+      <rect x="12" y="5" width="5" height="5" fill="#58a6ff"/>
+      <rect x="5" y="12" width="5" height="5" fill="#58a6ff"/>
+      <rect x="12" y="12" width="5" height="5" fill="#30363d"/>
+    </svg>
+    <h1>mdoc Verifier Tester</h1>
+    <span class="version">ISO 18013-7 / 23220</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="status-dot" id="status-dot"></div>
+  <span class="status-label" id="status-label">ready</span>
+</header>
+
+<div id="endpoint-bar" style="
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  padding:8px 24px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:12px;
+">
+  <span style="color:var(--text3);white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase">Endpoint</span>
+  <div style="position:relative;flex:1;max-width:560px">
+    <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:11px;pointer-events:none;font-family:var(--mono)">POST</span>
+    <input type="url" id="endpoint-bar-url" value=""
+      style="padding-left:44px;height:30px;font-family:var(--mono);font-size:12px;width:100%"
+      placeholder="https://your-server.example.com/mdoc/request"
+      oninput="syncEndpointUrl(this.value)">
+  </div>
+  <button class="btn sm" onclick="testEndpoint()" id="test-endpoint-btn">Test ↗</button>
+  <div id="endpoint-status" style="font-size:11px;color:var(--text3)">not tested</div>
+</div>
+
+<main>
+  <!-- ── Sidebar: Request Config ── -->
+  <aside>
+    <div>
+      <div class="section-label">Presentation Request</div>
+      <div class="gap-sm">
+        <div>
+          <label>Request URL (request_url)</label>
+          <input type="url" id="request-url" value="" placeholder="https://..."
+          oninput="document.getElementById('endpoint-bar-url').value=this.value; document.getElementById('endpoint-status').textContent='not tested'; document.getElementById('endpoint-status').style.color='var(--text3)'">
+        </div>
+        <div>
+          <label>Verifier ID</label>
+          <input type="text" id="verifier-id" value="urn:example:verifier">
+        </div>
+        <div>
+          <label>Doc Type</label>
+          <select id="doc-type">
+            <option value="org.iso.23220.photoid.1">org.iso.23220.photoid.1</option>
+            <option value="org.iso.18013.5.1.mDL">org.iso.18013.5.1.mDL</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div id="custom-doctype-row" style="display:none">
+          <label>Custom docType</label>
+          <input type="text" id="custom-doc-type" placeholder="org.example.credential.1">
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label">Namespace: org.iso.23220.photoid.1</div>
+      <div class="checkbox-grid" id="photoid-elements">
+        <!-- injected by JS -->
+      </div>
+    </div>
+
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="section-label" style="margin:0">Namespace: org.iso.18013.5.1</div>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0">
+          <input type="checkbox" id="include-mdl" style="accent-color:var(--accent)"> <span style="font-size:11px;color:var(--text2)">Include</span>
+        </label>
+      </div>
+      <div class="checkbox-grid" id="mdl-elements" style="opacity:.4;pointer-events:none">
+        <!-- injected by JS -->
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label">Nonce</div>
+      <div class="nonce-display" id="nonce-display">
+        <span id="nonce-val" style="overflow:hidden;text-overflow:ellipsis;max-width:220px;white-space:nowrap">—</span>
+        <button class="btn sm" onclick="regenerateNonce()">↺</button>
+      </div>
+    </div>
+
+    <button class="btn primary" id="generate-btn" onclick="generateRequest()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg>
+      Generate DeviceRequest
+    </button>
+  </aside>
+
+  <!-- ── Main content ── -->
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('qr')">QR / Deep Link</div>
+      <div class="tab" onclick="switchTab('cbor')">CBOR Inspector</div>
+      <div class="tab" onclick="switchTab('response')">Response Inspector</div>
+      <div class="tab" onclick="switchTab('log')">Log</div>
+    </div>
+
+    <!-- Tab: QR -->
+    <div class="tab-panel active" id="tab-qr">
+      <div class="card">
+        <div class="card-header">
+          <h3>ReaderEngagement QR Code</h3>
+          <button class="btn sm" id="download-qr-btn" onclick="downloadQR()" style="display:none">↓ PNG</button>
+          <button class="btn sm" id="copy-uri-btn" onclick="copyUri()" style="display:none">Copy URI</button>
+        </div>
+        <div id="qr-container">
+          <div id="qr-box">
+            <div class="placeholder">Generate a request<br>to see QR code</div>
+          </div>
+          <div id="mdoc-uri-panel" style="display:none;width:100%">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">mdoc:// URI (ISO 18013-7 §8.3.3.1.2)</div>
+            <div class="uri-display" id="uri-display"></div>
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+              <a id="open-deeplink" href="#" class="btn sm" onclick="openDeeplink(event)">
+                Open on this device ↗
+              </a>
+              <button class="btn sm" onclick="copyUri()">Copy URI</button>
+              <button class="btn sm" onclick="generateRequest()">↺ Regenerate</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Request Summary</h3></div>
+        <div class="card-body" id="request-summary">
+          <div class="empty-state">
+            <div class="icon">⬡</div>
+            <p>No request generated yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: CBOR Inspector -->
+    <div class="tab-panel" id="tab-cbor">
+      <div class="card">
+        <div class="card-header">
+          <h3>CBOR Encoder / Decoder</h3>
+          <div style="display:flex;gap:6px;">
+            <button class="btn sm" onclick="loadCurrentRequest()">Load Current Request</button>
+            <button class="btn sm" onclick="clearCbor()">Clear</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="gap-sm">
+            <div>
+              <label>Hex / Base64 Input (paste any CBOR-encoded payload)</label>
+              <textarea id="cbor-input" rows="4" placeholder="a50068312e3120...  or  pQBoMS4xIA=="></textarea>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn" onclick="decodeCbor()">Decode ↓</button>
+              <button class="btn" onclick="encodeCborFromJson()">Encode from JSON ↑</button>
+            </div>
+            <div>
+              <label>Decoded Tree</label>
+              <div class="card" style="padding:12px;min-height:80px">
+                <div class="cbor-tree" id="cbor-tree"><span style="color:var(--text3)">—</span></div>
+              </div>
+            </div>
+            <div>
+              <label>JSON representation</label>
+              <textarea id="cbor-json-out" rows="6" readonly style="color:var(--text2)"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Hex Dump</h3></div>
+        <div class="card-body">
+          <div class="hex-dump" id="hex-dump-output">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Response Inspector -->
+    <div class="tab-panel" id="tab-response">
+
+      <!-- Input row -->
+      <div class="card">
+        <div class="card-header">
+          <h3>DeviceResponse / any CBOR payload</h3>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span id="resp-size-badge" style="display:none" class="badge info"></span>
+            <button class="btn sm danger" onclick="clearResponse()">Clear</button>
+          </div>
+        </div>
+        <div class="card-body gap-sm">
+          <div>
+            <label>Hex or base64url — paste and decoding starts automatically</label>
+            <textarea id="response-input" rows="4"
+              placeholder="a50068312e31... or base64url from your REST endpoint response body"
+              oninput="onResponseInput(this.value)"
+              style="font-family:var(--mono);font-size:12px"></textarea>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <button class="btn primary" style="width:auto" onclick="decodeResponse()">Decode</button>
+            <button class="btn sm" onclick="loadMockResponse()">Load mock response</button>
+            <div id="resp-error" style="color:var(--red);font-size:12px;display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results — shown after decode -->
+      <div id="response-results" style="display:none">
+
+        <!-- Meta strip -->
+        <div class="response-meta" id="response-meta"></div>
+
+        <!-- Disclosed attributes (best-effort IssuerSignedItem walk) -->
+        <div class="card" id="attrs-card">
+          <div class="card-header">
+            <h3>Disclosed attributes</h3>
+            <span id="attr-count-badge" class="badge info"></span>
+          </div>
+          <div class="card-body" style="padding:0">
+            <table class="field-table">
+              <thead>
+                <tr>
+                  <th style="width:30%">namespace</th>
+                  <th style="width:28%">elementIdentifier</th>
+                  <th>elementValue</th>
+                </tr>
+              </thead>
+              <tbody id="attr-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Two-column: CBOR tree + Hex dump -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="card">
+            <div class="card-header">
+              <h3>CBOR tree</h3>
+              <button class="btn sm" onclick="copyRespJson()">Copy JSON</button>
+            </div>
+            <div class="card-body" style="overflow:auto;max-height:480px">
+              <div class="cbor-tree" id="response-cbor-tree"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3>Hex dump</h3>
+              <button class="btn sm" onclick="copyRespHex()">Copy hex</button>
+            </div>
+            <div class="hex-dump" id="response-hex-dump" style="max-height:480px;border:none;border-radius:0;padding:12px 16px">—</div>
+          </div>
+        </div>
+
+        <!-- Full JSON -->
+        <div class="card">
+          <div class="card-header">
+            <h3>JSON representation</h3>
+            <button class="btn sm" onclick="copyRespJson()">Copy</button>
+          </div>
+          <div class="card-body">
+            <textarea id="response-json-out" rows="10" readonly
+              style="font-family:var(--mono);font-size:11px;color:var(--text2);width:100%"></textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="response-empty" class="empty-state">
+        <div style="font-size:28px;margin-bottom:10px;opacity:.3">⬡</div>
+        <p style="color:var(--text3)">Paste a DeviceResponse (hex or base64) above — decoded view appears here</p>
+      </div>
+    </div>
+
+    <!-- Tab: Log -->
+    <div class="tab-panel" id="tab-log">
+      <div class="card">
+        <div class="card-header">
+          <h3>Session Log</h3>
+          <button class="btn sm danger" onclick="clearLog()">Clear</button>
+        </div>
+        <div class="card-body">
+          <div class="log" id="log-panel"></div>
+        </div>
+      </div>
+
+      <div class="card" id="session-state-card">
+        <div class="card-header"><h3>Session State (ephemeral)</h3></div>
+        <div class="card-body">
+          <table class="field-table" id="session-table">
+            <thead><tr><th>field</th><th style="width:100%">value</th></tr></thead>
+            <tbody id="session-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CBOR implementation (minimal, no deps)
+// ════════════════════════════════════════════════════════════
+const CBOR = (() => {
+  function encode(val) {
+    const parts = [];
+    function w(v) { parts.push(v); }
+    function encodeVal(v) {
+      if (v === null || v === undefined) { w(new Uint8Array([0xf6])); return; }
+      if (typeof v === 'boolean') { w(new Uint8Array([v ? 0xf5 : 0xf4])); return; }
+      if (typeof v === 'number') {
+        if (Number.isInteger(v) && v >= 0 && v <= 0xffffffff) {
+          w(encodeUint(0, v));
+        } else if (Number.isInteger(v) && v < 0) {
+          w(encodeUint(1, -v - 1));
+        } else {
+          const buf = new ArrayBuffer(9); const dv = new DataView(buf);
+          dv.setUint8(0, 0xfb); dv.setFloat64(1, v); w(new Uint8Array(buf));
+        }
+        return;
+      }
+      if (typeof v === 'bigint') {
+        if (v >= 0n) w(encodeUint(0, Number(v)));
+        else w(encodeUint(1, Number(-v - 1n)));
+        return;
+      }
+      if (typeof v === 'string') {
+        const bytes = new TextEncoder().encode(v);
+        w(encodeUint(3, bytes.length)); w(bytes); return;
+      }
+      if (v instanceof Uint8Array) {
+        w(encodeUint(2, v.length)); w(v); return;
+      }
+      if (Array.isArray(v)) {
+        w(encodeUint(4, v.length));
+        v.forEach(encodeVal); return;
+      }
+      if (v instanceof Map) {
+        w(encodeUint(5, v.size));
+        v.forEach((val, key) => { encodeVal(key); encodeVal(val); }); return;
+      }
+      if (typeof v === 'object') {
+        const keys = Object.keys(v);
+        w(encodeUint(5, keys.length));
+        keys.forEach(k => { encodeVal(k); encodeVal(v[k]); }); return;
+      }
+    }
+    function encodeUint(major, val) {
+      const m = major << 5;
+      if (val <= 23) return new Uint8Array([m | val]);
+      if (val <= 0xff) return new Uint8Array([m | 24, val]);
+      if (val <= 0xffff) { const b = new ArrayBuffer(3); const dv = new DataView(b); dv.setUint8(0, m | 25); dv.setUint16(1, val); return new Uint8Array(b); }
+      if (val <= 0xffffffff) { const b = new ArrayBuffer(5); const dv = new DataView(b); dv.setUint8(0, m | 26); dv.setUint32(1, val); return new Uint8Array(b); }
+      const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, m | 27); dv.setBigUint64(1, BigInt(val)); return new Uint8Array(b);
+    }
+    encodeVal(val);
+    const total = parts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total); let off = 0;
+    parts.forEach(p => { out.set(p, off); off += p.length; });
+    return out;
+  }
+
+  function decode(buf) {
+    const dv = new DataView(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset, buf.byteLength);
+    let pos = 0;
+    function read() {
+      const b = dv.getUint8(pos++);
+      const major = b >> 5, add = b & 0x1f;
+      let len;
+      if (add <= 23) len = add;
+      else if (add === 24) { len = dv.getUint8(pos++); }
+      else if (add === 25) { len = dv.getUint16(pos); pos += 2; }
+      else if (add === 26) { len = dv.getUint32(pos); pos += 4; }
+      else if (add === 27) { len = Number(dv.getBigUint64(pos)); pos += 8; }
+      else if (add === 31) len = Infinity;
+
+      if (major === 0) return len;
+      if (major === 1) return -1 - len;
+      if (major === 2) {
+        const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset + pos, len);
+        pos += len; return bytes;
+      }
+      if (major === 3) {
+        const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset + pos, len);
+        pos += len; return new TextDecoder().decode(bytes);
+      }
+      if (major === 4) {
+        if (len === Infinity) {
+          const arr = [];
+          while (true) { const b2 = dv.getUint8(pos); if (b2 === 0xff) { pos++; break; } arr.push(read()); } return arr;
+        }
+        const arr = []; for (let i = 0; i < len; i++) arr.push(read()); return arr;
+      }
+      if (major === 5) {
+        if (len === Infinity) {
+          const map = new Map();
+          while (true) { const b2 = dv.getUint8(pos); if (b2 === 0xff) { pos++; break; } map.set(read(), read()); } return map;
+        }
+        const map = new Map(); for (let i = 0; i < len; i++) map.set(read(), read());
+        return map;
+      }
+      if (major === 6) { return { _tag: len, _val: read() }; }
+      if (major === 7) {
+        if (len === 20) return false; if (len === 21) return true;
+        if (len === 22) return null; if (len === 23) return undefined;
+        if (add === 25) { pos += 2; return NaN; }
+        if (add === 26) { const f = dv.getFloat32(pos); pos += 4; return f; }
+        if (add === 27) { const f = dv.getFloat64(pos); pos += 8; return f; }
+        return undefined;
+      }
+    }
+    return read();
+  }
+
+  return { encode, decode };
+})();
+
+// ════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════
+let state = {
+  nonce: null,
+  readerPrivKey: null,
+  readerPubKey: null,
+  readerEngagementBytes: null,
+  deviceRequestPayload: null,
+  mdocUri: null,
+  sessionNonce: null,
+};
+let qrInstance = null;
+
+// ════════════════════════════════════════════════════════════
+// Element definitions
+// ════════════════════════════════════════════════════════════
+const PHOTOID_ELEMENTS = ['portrait','family_name','given_name','birth_date','issue_date','expiry_date','issuing_country','document_number','age_over_18','age_in_years','age_birth_year'];
+const MDL_ELEMENTS = ['family_name','given_name','birth_date','issuing_country','portrait','driving_privileges'];
+
+// ════════════════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════════════════
+function init() {
+  const defaultRequestUrl = `${window.location.origin}/mdoc/request`;
+  document.getElementById('request-url').value = defaultRequestUrl;
+  document.getElementById('endpoint-bar-url').value = defaultRequestUrl;
+  buildCheckboxes('photoid-elements', PHOTOID_ELEMENTS, ['portrait','family_name','given_name','birth_date','age_over_18']);
+  buildCheckboxes('mdl-elements', MDL_ELEMENTS, ['family_name','given_name','birth_date','issuing_country']);
+  regenerateNonce();
+
+  document.getElementById('include-mdl').addEventListener('change', e => {
+    const mdl = document.getElementById('mdl-elements');
+    mdl.style.opacity = e.target.checked ? '1' : '.4';
+    mdl.style.pointerEvents = e.target.checked ? 'auto' : 'none';
+  });
+  document.getElementById('doc-type').addEventListener('change', e => {
+    document.getElementById('custom-doctype-row').style.display = e.target.value === 'custom' ? 'block' : 'none';
+  });
+
+  log('info', 'ISO 18013-7 Verifier Tester initialised (in-browser crypto)');
+  log('info', 'Ephemeral key pair will be generated on each DeviceRequest');
+  updateSessionTable();
+}
+
+function buildCheckboxes(containerId, elements, defaultChecked) {
+  const container = document.getElementById(containerId);
+  elements.forEach(el => {
+    const div = document.createElement('div');
+    div.className = 'checkbox-item' + (defaultChecked.includes(el) ? ' checked' : '');
+    div.innerHTML = `<input type="checkbox" ${defaultChecked.includes(el) ? 'checked' : ''}><span>${el}</span>`;
+    const cb = div.querySelector('input');
+    cb.addEventListener('change', () => {
+      div.classList.toggle('checked', cb.checked);
+    });
+    container.appendChild(div);
+  });
+}
+
+function getCheckedElements(containerId) {
+  const checks = document.querySelectorAll(`#${containerId} input[type=checkbox]`);
+  const result = {};
+  checks.forEach(c => { if (c.checked) result[c.nextElementSibling.textContent] = false; });
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════
+// Nonce
+// ════════════════════════════════════════════════════════════
+function regenerateNonce() {
+  state.nonce = crypto.getRandomValues(new Uint8Array(16));
+  const hex = Array.from(state.nonce).map(b => b.toString(16).padStart(2,'0')).join('');
+  document.getElementById('nonce-val').textContent = hex;
+  log('info', `Nonce regenerated: ${hex.slice(0,16)}…`);
+}
+
+// ════════════════════════════════════════════════════════════
+// Web Crypto key generation (ECDSA P-256)
+// ════════════════════════════════════════════════════════════
+async function generateEphemeralKeypair() {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' }, true,
+    ['sign', 'verify']
+  );
+  return keyPair;
+}
+
+async function exportPublicKeyCose(publicKey) {
+  const raw = await crypto.subtle.exportKey('raw', publicKey);
+  const bytes = new Uint8Array(raw);
+  // raw = 04 || X (32) || Y (32)
+  return new Map([
+    [1, 2],          // kty: EC2
+    [-1, 1],         // crv: P-256
+    [-2, bytes.slice(1, 33)],  // x
+    [-3, bytes.slice(33, 65)], // y
+  ]);
+}
+
+async function signCoseSign1(payload, privateKey) {
+  const protectedHeader = CBOR.encode({ 1: -7 }); // ES256
+  const sigStructure = CBOR.encode(['Signature1', protectedHeader, new Uint8Array(0), payload]);
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: { name: 'SHA-256' } },
+    privateKey,
+    sigStructure
+  );
+  // Browsers differ here: some return raw R||S, others ASN.1 DER.
+  const sig = derToRaw(new Uint8Array(signature));
+  return CBOR.encode([protectedHeader, new Map(), payload, sig]);
+}
+
+function derToRaw(der) {
+  if (der.length === 64) return der;
+  if (der[0] !== 0x30) throw new Error('Unsupported ECDSA signature format');
+
+  let pos = 1;
+  const seqLen = der[pos++];
+  if (seqLen & 0x80) {
+    const lenBytes = seqLen & 0x7f;
+    pos += lenBytes;
+  }
+
+  // Simple DER SEQUENCE -> r, s extraction
+  if (der[pos] !== 0x02) throw new Error('Expected INTEGER');
+  pos++;
+  const rLen = der[pos++];
+  const r = der.slice(pos, pos + rLen);
+  pos += rLen;
+  if (der[pos] !== 0x02) throw new Error('Expected INTEGER');
+  pos++;
+  const sLen = der[pos++];
+  const s = der.slice(pos, pos + sLen);
+  // Pad/trim to 32 bytes
+  const padTo32 = arr => {
+    const r32 = new Uint8Array(32);
+    const src = arr.length > 32 ? arr.slice(arr.length - 32) : arr;
+    r32.set(src, 32 - src.length);
+    return r32;
+  };
+  const raw = new Uint8Array(64);
+  raw.set(padTo32(r), 0);
+  raw.set(padTo32(s), 32);
+  return raw;
+}
+
+// ════════════════════════════════════════════════════════════
+// Build ReaderEngagement
+// ════════════════════════════════════════════════════════════
+function buildReaderEngagement(coseKey, requestUrl) {
+  const eReaderKeyBytes = { _tag: 24, _val: CBOR.encode(coseKey) }; // tag(24, bstr)
+  // Encode as CBOR map manually
+  return new Map([
+    [0, "1.1"],
+    [1, [1, eReaderKeyBytes]],
+    [2, [[4, 1, new Map([[0, requestUrl]])]]],
+  ]);
+}
+
+// We need a custom encode that handles CBOR tags
+function encodeCborWithTags(val) {
+  const parts = [];
+  function w(v) { parts.push(v instanceof Uint8Array ? v : new Uint8Array(v)); }
+  function encodeVal(v) {
+    if (v === null || v === undefined) { w([0xf6]); return; }
+    if (typeof v === 'boolean') { w([v ? 0xf5 : 0xf4]); return; }
+    if (typeof v === 'number') {
+      if (Number.isInteger(v) && v >= 0 && v <= 0xffffffff) { w(encodeUint(0, v)); }
+      else if (Number.isInteger(v) && v < 0) { w(encodeUint(1, -v - 1)); }
+      else { const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, 0xfb); dv.setFloat64(1, v); w(new Uint8Array(b)); }
+      return;
+    }
+    if (typeof v === 'bigint') { v >= 0n ? w(encodeUint(0, Number(v))) : w(encodeUint(1, Number(-v-1n))); return; }
+    if (typeof v === 'string') { const bytes = new TextEncoder().encode(v); w(encodeUint(3, bytes.length)); w(bytes); return; }
+    if (v instanceof Uint8Array) { w(encodeUint(2, v.length)); w(v); return; }
+    if (Array.isArray(v)) { w(encodeUint(4, v.length)); v.forEach(encodeVal); return; }
+    if (v && typeof v === 'object' && '_tag' in v) {
+      w(encodeUint(6, v._tag));
+      if (v._val instanceof Uint8Array) {
+        w(encodeUint(2, v._val.length)); w(v._val);
+      } else {
+        encodeVal(v._val);
+      }
+      return;
+    }
+    if (v instanceof Map) {
+      w(encodeUint(5, v.size));
+      v.forEach((val2, key2) => { encodeVal(key2); encodeVal(val2); }); return;
+    }
+    if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      w(encodeUint(5, keys.length));
+      keys.forEach(k => { encodeVal(k); encodeVal(v[k]); }); return;
+    }
+  }
+  function encodeUint(major, val) {
+    const m = major << 5;
+    if (val <= 23) return [m | val];
+    if (val <= 0xff) return [m | 24, val];
+    if (val <= 0xffff) { const b = new ArrayBuffer(3); const dv = new DataView(b); dv.setUint8(0, m | 25); dv.setUint16(1, val); return new Uint8Array(b); }
+    if (val <= 0xffffffff) { const b = new ArrayBuffer(5); const dv = new DataView(b); dv.setUint8(0, m | 26); dv.setUint32(1, val); return new Uint8Array(b); }
+    const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, m | 27); dv.setBigUint64(1, BigInt(val)); return new Uint8Array(b);
+  }
+  encodeVal(val);
+  const total = parts.reduce((a, b) => a + b.length, 0);
+  const out = new Uint8Array(total); let off = 0;
+  parts.forEach(p => { out.set(p, off); off += p.length; }); return out;
+}
+
+// ════════════════════════════════════════════════════════════
+// Main: generate request
+// ════════════════════════════════════════════════════════════
+async function generateRequest() {
+  const btn = document.getElementById('generate-btn');
+  btn.textContent = 'Generating…'; btn.disabled = true;
+  setStatus('generating…', '#d29922');
+
+  try {
+    const requestUrl = document.getElementById('request-url').value.trim();
+    const verifierId = document.getElementById('verifier-id').value.trim();
+    const docTypeSel = document.getElementById('doc-type').value;
+    const docType = docTypeSel === 'custom' ? document.getElementById('custom-doc-type').value.trim() : docTypeSel;
+    const includeMdl = document.getElementById('include-mdl').checked;
+
+    const photoidNs = docType === 'org.iso.23220.photoid.1' ? 'org.iso.23220.photoid.1' : 'org.iso.18013.5.1';
+    const selectedPhotoid = getCheckedElements('photoid-elements');
+    const selectedMdl = includeMdl ? getCheckedElements('mdl-elements') : null;
+
+    log('info', `Generating DeviceRequest for ${docType}`);
+    log('info', `Elements: ${Object.keys(selectedPhotoid).join(', ')}`);
+
+    // 1. Generate ephemeral keypair
+    const keyPair = await generateEphemeralKeypair();
+    state.readerPrivKey = keyPair.privateKey;
+    state.readerPubKey = keyPair.publicKey;
+    log('ok', 'Ephemeral P-256 keypair generated');
+
+    // 2. Build ItemsRequest payload
+    const nsMap = new Map([[photoidNs, selectedPhotoid]]);
+    if (includeMdl && selectedMdl) nsMap.set('org.iso.18013.5.1', selectedMdl);
+
+    const nonceB64 = btoa(String.fromCharCode(...state.nonce));
+    const requestInfo = {
+      verifier: verifierId,
+      created: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+      nonce: nonceB64,
+    };
+
+    const itemsRequestMap = new Map([
+      ['docType', docType],
+      ['nameSpaces', nsMap],
+      ['requestInfo', requestInfo],
+    ]);
+    const itemsRequestBytes = encodeCborWithTags(itemsRequestMap);
+    state.deviceRequestPayload = itemsRequestBytes;
+    log('ok', `ItemsRequest encoded: ${itemsRequestBytes.length} bytes`);
+
+    // 3. Sign (COSE_Sign1)
+    const readerAuth = await signCoseSign1(itemsRequestBytes, state.readerPrivKey);
+    log('ok', `COSE_Sign1 signed: ${readerAuth.length} bytes`);
+
+    // 4. Build ReaderEngagement
+    const coseKey = await exportPublicKeyCose(state.readerPubKey);
+    const readerEngagement = buildReaderEngagement(coseKey, requestUrl);
+    const reEngBytes = encodeCborWithTags(readerEngagement);
+    state.readerEngagementBytes = reEngBytes;
+    log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
+
+    // 5. Build mdoc:// URI from ReaderEngagement
+    const b64 = btoa(String.fromCharCode(...reEngBytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const mdocUri = `mdoc://${b64}`;
+    state.mdocUri = mdocUri;
+    log('ok', `mdoc:// URI: ${mdocUri.length} chars`);
+
+    // 6. Render QR
+    renderQR(mdocUri);
+
+    // 7. Update URI panel
+    document.getElementById('uri-display').textContent = mdocUri;
+    document.getElementById('mdoc-uri-panel').style.display = 'block';
+    document.getElementById('open-deeplink').href = mdocUri;
+    document.getElementById('download-qr-btn').style.display = 'inline-flex';
+    document.getElementById('copy-uri-btn').style.display = 'inline-flex';
+
+    // 8. Request summary
+    renderRequestSummary({
+      docType, requestUrl, verifierId,
+      elements: Object.keys(selectedPhotoid),
+      mdlElements: selectedMdl ? Object.keys(selectedMdl) : [],
+      reEngSize: reEngBytes.length,
+      itemsReqSize: itemsRequestBytes.length,
+      readerAuthSize: readerAuth.length,
+      ns: photoidNs,
+    });
+
+    // Update session state
+    const rawPub = await crypto.subtle.exportKey('raw', state.readerPubKey);
+    const pubHex = Array.from(new Uint8Array(rawPub)).map(b => b.toString(16).padStart(2,'0')).join('');
+    state.sessionNonce = nonceB64;
+    updateSessionTable({
+      docType, requestUrl, verifierId,
+      'reader pub key (x962)': pubHex.slice(0, 32) + '…',
+      'nonce (b64)': nonceB64,
+      'readerEngagement size': reEngBytes.length + ' bytes',
+      'itemsRequest size': itemsRequestBytes.length + ' bytes',
+    });
+
+    setStatus('request ready', '#3fb950');
+    log('ok', 'DeviceRequest generation complete ✓');
+
+  } catch (err) {
+    log('err', `Error: ${err.message}`);
+    setStatus('error', '#f85149');
+    console.error(err);
+  }
+
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg> Generate DeviceRequest`;
+  btn.disabled = false;
+}
+
+// ════════════════════════════════════════════════════════════
+// QR code
+// ════════════════════════════════════════════════════════════
+function renderQR(uri) {
+  const box = document.getElementById('qr-box');
+  box.innerHTML = '';
+  const size = Math.min(280, box.parentElement.offsetWidth - 64);
+  qrInstance = new QRCode(box, {
+    text: uri,
+    width: size || 240,
+    height: size || 240,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+}
+
+function downloadQR() {
+  const canvas = document.querySelector('#qr-box canvas');
+  if (!canvas) return;
+  const a = document.createElement('a');
+  a.download = 'mdoc-request-qr.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function openDeeplink(e) {
+  if (!state.mdocUri) { e.preventDefault(); return; }
+}
+
+// ════════════════════════════════════════════════════════════
+// Request summary renderer
+// ════════════════════════════════════════════════════════════
+function renderRequestSummary({ docType, requestUrl, verifierId, elements, mdlElements, reEngSize, itemsReqSize, readerAuthSize, ns }) {
+  const el = document.getElementById('request-summary');
+  el.innerHTML = `
+    <table class="field-table">
+      <tr><td>docType</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px;color:var(--accent)">${docType}</code></td></tr>
+      <tr><td>request_url</td><td colspan="2" style="word-break:break-all">${requestUrl}</td></tr>
+      <tr><td>verifier ID</td><td colspan="2">${verifierId}</td></tr>
+      <tr><td>namespace</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${ns}</code></td></tr>
+      <tr><td>elements requested</td><td colspan="2">${elements.map(e => `<span class="badge info" style="margin:1px">${e}</span>`).join('')}</td></tr>
+      ${mdlElements.length ? `<tr><td>mdl elements</td><td colspan="2">${mdlElements.map(e => `<span class="badge info" style="margin:1px">${e}</span>`).join('')}</td></tr>` : ''}
+      <tr><td>ReaderEngagement</td><td colspan="2">${reEngSize} bytes</td></tr>
+      <tr><td>ItemsRequest</td><td colspan="2">${itemsReqSize} bytes</td></tr>
+      <tr><td>COSE_Sign1</td><td colspan="2">${readerAuthSize} bytes</td></tr>
+    </table>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// CBOR Inspector
+// ════════════════════════════════════════════════════════════
+function loadCurrentRequest() {
+  if (!state.readerEngagementBytes) {
+    log('warn', 'No request generated yet'); return;
+  }
+  const hex = Array.from(state.readerEngagementBytes).map(b => b.toString(16).padStart(2,'0')).join('');
+  document.getElementById('cbor-input').value = hex;
+  decodeCbor();
+  switchTab('cbor');
+}
+
+function clearCbor() {
+  document.getElementById('cbor-input').value = '';
+  document.getElementById('cbor-tree').innerHTML = '<span style="color:var(--text3)">—</span>';
+  document.getElementById('cbor-json-out').value = '';
+  document.getElementById('hex-dump-output').textContent = '—';
+}
+
+function parseInputBytes(raw) {
+  raw = raw.trim().replace(/\s+/g,'');
+  // Try hex first
+  if (/^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0) {
+    return Uint8Array.from(raw.match(/.{2}/g).map(h => parseInt(h, 16)));
+  }
+  // Try base64 / base64url
+  try {
+    const b64 = raw.replace(/-/g,'+').replace(/_/g,'/');
+    const bin = atob(b64);
+    return Uint8Array.from(bin.split('').map(c => c.charCodeAt(0)));
+  } catch(e) {}
+  throw new Error('Cannot parse input as hex or base64');
+}
+
+function decodeCbor() {
+  const raw = document.getElementById('cbor-input').value;
+  if (!raw.trim()) return;
+  try {
+    const bytes = parseInputBytes(raw);
+    const decoded = CBOR.decode(bytes);
+    document.getElementById('cbor-tree').innerHTML = renderCborTree(decoded);
+    document.getElementById('cbor-json-out').value = JSON.stringify(cborToJson(decoded), null, 2);
+    document.getElementById('hex-dump-output').textContent = hexDump(bytes);
+    log('ok', `CBOR decoded: ${bytes.length} bytes`);
+  } catch(e) {
+    log('err', `CBOR decode error: ${e.message}`);
+    document.getElementById('cbor-tree').innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }
+}
+
+function encodeCborFromJson() {
+  const json = document.getElementById('cbor-json-out').value;
+  try {
+    const obj = JSON.parse(json);
+    const bytes = CBOR.encode(obj);
+    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+    document.getElementById('cbor-input').value = hex;
+    document.getElementById('hex-dump-output').textContent = hexDump(bytes);
+    log('ok', `JSON encoded to CBOR: ${bytes.length} bytes`);
+  } catch(e) {
+    log('err', `Encode error: ${e.message}`);
+  }
+}
+
+function renderCborTree(val, indent = 0) {
+  const pad = indent > 0 ? `<div class="cbor-indent">` : '';
+  const close = indent > 0 ? `</div>` : '';
+  if (val === null) return `<span class="cbor-bool">null</span>`;
+  if (val === undefined) return `<span class="cbor-bool">undefined</span>`;
+  if (typeof val === 'boolean') return `<span class="cbor-bool">${val}</span>`;
+  if (typeof val === 'number') return `<span class="cbor-num">${val}</span>`;
+  if (typeof val === 'bigint') return `<span class="cbor-num">${val}n</span>`;
+  if (typeof val === 'string') return `<span class="cbor-str">"${escHtml(val)}"</span>`;
+  if (val instanceof Uint8Array) {
+    const hex = Array.from(val).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const preview = hex.length > 32 ? hex.slice(0,32)+'…' : hex;
+    return `<span class="cbor-bytes">h'${preview}' <span class="cbor-tag">(${val.length}B)</span></span>`;
+  }
+  if (val && '_tag' in val) {
+    return `<span class="cbor-tag">tag(${val._tag})</span> ${renderCborTree(val._val, indent)}`;
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[]';
+    return `[${pad}${val.map((v,i) => renderCborTree(v, indent+1)).join('<br>')}${close}]`;
+  }
+  if (val instanceof Map) {
+    if (val.size === 0) return '{}';
+    let rows = '';
+    val.forEach((v, k) => {
+      rows += `<span class="cbor-key">${typeof k === 'string' ? `"${escHtml(k)}"` : k}</span>: ${renderCborTree(v, indent+1)}<br>`;
+    });
+    return `{${pad}${rows}${close}}`;
+  }
+  if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (!keys.length) return '{}';
+    let rows = '';
+    keys.forEach(k => {
+      rows += `<span class="cbor-key">"${escHtml(k)}"</span>: ${renderCborTree(val[k], indent+1)}<br>`;
+    });
+    return `{${pad}${rows}${close}}`;
+  }
+  return String(val);
+}
+
+function cborToJson(val) {
+  if (val === null || val === undefined || typeof val === 'boolean' || typeof val === 'number' || typeof val === 'string') return val;
+  if (typeof val === 'bigint') return Number(val);
+  if (val instanceof Uint8Array) return Array.from(val).map(b=>b.toString(16).padStart(2,'0')).join('');
+  if (val && '_tag' in val) return { '__cbor_tag': val._tag, value: cborToJson(val._val) };
+  if (Array.isArray(val)) return val.map(cborToJson);
+  if (val instanceof Map) {
+    const out = {};
+    val.forEach((v, k) => { out[typeof k === 'number' ? k : String(k)] = cborToJson(v); });
+    return out;
+  }
+  if (typeof val === 'object') {
+    const out = {};
+    Object.keys(val).forEach(k => { out[k] = cborToJson(val[k]); });
+    return out;
+  }
+  return val;
+}
+
+function hexDump(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 16) {
+    const chunk = bytes.slice(i, i+16);
+    const addr = i.toString(16).padStart(8,'0');
+    const hex = Array.from(chunk).map(b=>b.toString(16).padStart(2,'0')).join(' ').padEnd(47);
+    const ascii = Array.from(chunk).map(b => b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.').join('');
+    out += `${addr}  ${hex}  ${ascii}\n`;
+  }
+  return out;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ════════════════════════════════════════════════════════════
+// Response Verifier
+// ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// Response Inspector — decode-only
+// ════════════════════════════════════════════════════════════
+let _respDecodeTimer = null;
+function onResponseInput(val) {
+  clearTimeout(_respDecodeTimer);
+  const errEl = document.getElementById('resp-error');
+  errEl.style.display = 'none';
+  if (!val.trim()) { clearResponse(); return; }
+  // Debounce 400ms so it decodes after paste settles
+  _respDecodeTimer = setTimeout(() => decodeResponse(), 400);
+}
+
+function decodeResponse() {
+  const raw = document.getElementById('response-input').value.trim();
+  if (!raw) return;
+  const errEl = document.getElementById('resp-error');
+  errEl.style.display = 'none';
+
+  let bytes;
+  try { bytes = parseInputBytes(raw); }
+  catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    const decoded = CBOR.decode(bytes);
+    const json = cborToJson(decoded);
+
+    // -- meta strip --
+    const statusVal = decoded instanceof Map
+      ? (decoded.get('status') ?? decoded.get(0))
+      : (json?.status ?? '—');
+    const docsArr = decoded instanceof Map
+      ? (decoded.get('documents') || decoded.get(4))
+      : null;
+    const docCount = Array.isArray(docsArr) ? docsArr.length : (docsArr ? 1 : '—');
+    // count unique namespaces
+    const attrs = extractAttributes(decoded);
+    const nsSet = new Set(attrs.map(a => a.ns));
+
+    document.getElementById('response-meta').innerHTML = `
+      <div class="meta-card">
+        <div class="label">status</div>
+        <div class="value ${statusVal === 0 ? 'ok' : statusVal === '—' ? '' : 'warn'}">${statusVal === 0 ? '0 · OK' : statusVal}</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">documents</div>
+        <div class="value">${docCount}</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">size</div>
+        <div class="value">${bytes.length} B</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">namespaces</div>
+        <div class="value">${nsSet.size || '—'}</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">attributes</div>
+        <div class="value ${attrs.length > 0 ? 'ok' : ''}">${attrs.length}</div>
+      </div>`;
+
+    // -- size badge in header --
+    const sizeBadge = document.getElementById('resp-size-badge');
+    sizeBadge.textContent = `${bytes.length} B`;
+    sizeBadge.style.display = 'inline-block';
+
+    // -- disclosed attributes table --
+    const tbody = document.getElementById('attr-tbody');
+    const countBadge = document.getElementById('attr-count-badge');
+    tbody.innerHTML = '';
+    if (attrs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:16px">
+        No IssuerSignedItem attributes found — inspect the CBOR tree below for raw structure
+      </td></tr>`;
+      countBadge.textContent = '0';
+    } else {
+      attrs.forEach(a => {
+        const tr = document.createElement('tr');
+        // Render elementValue — handle bytes specially
+        let valDisplay = escHtml(String(a.value));
+        if (a.rawVal instanceof Uint8Array) {
+          const hex = Array.from(a.rawVal).map(b=>b.toString(16).padStart(2,'0')).join('');
+          const preview = hex.length > 40 ? hex.slice(0,40)+'…' : hex;
+          valDisplay = `<span class="cbor-bytes" title="${hex}">h'${preview}'</span>`;
+        } else if (typeof a.rawVal === 'boolean') {
+          valDisplay = `<span class="cbor-bool">${a.rawVal}</span>`;
+        }
+        tr.innerHTML = `
+          <td style="font-size:11px">${escHtml(a.ns)}</td>
+          <td style="font-family:var(--mono);color:var(--accent)">${escHtml(a.element)}</td>
+          <td>${valDisplay}</td>`;
+        tbody.appendChild(tr);
+      });
+      countBadge.textContent = `${attrs.length} fields`;
+    }
+
+    // -- CBOR tree --
+    document.getElementById('response-cbor-tree').innerHTML = renderCborTree(decoded);
+
+    // -- Hex dump --
+    document.getElementById('response-hex-dump').textContent = hexDump(bytes);
+
+    // -- JSON --
+    document.getElementById('response-json-out').value = JSON.stringify(json, null, 2);
+
+    document.getElementById('response-empty').style.display = 'none';
+    document.getElementById('response-results').style.display = 'block';
+    setStatus('decoded', '#3fb950');
+    log('ok', `DeviceResponse decoded: ${bytes.length}B, ${attrs.length} attribute(s), ${nsSet.size} namespace(s)`);
+
+  } catch(e) {
+    errEl.textContent = `CBOR decode error: ${e.message}`; errEl.style.display = 'block';
+    log('err', `Response decode error: ${e.message}`);
+    setStatus('error', '#f85149');
+  }
+}
+
+function extractAttributes(decoded) {
+  const attrs = [];
+  function walk(obj, currentNs) {
+    if (!obj) return;
+    if (obj instanceof Map) {
+      // Look for nameSpaces map (string or int key 3)
+      const nsMap = obj.get('nameSpaces') ?? obj.get(3);
+      if (nsMap instanceof Map) {
+        nsMap.forEach((items, nsName) => {
+          if (!Array.isArray(items)) return;
+          items.forEach(item => {
+            // item may be a bstr wrapping a CBOR map (tag 24), or already decoded
+            let inner = item;
+            if (item && '_tag' in item && item._tag === 24) {
+              try { inner = CBOR.decode(item._val); } catch(e) { inner = null; }
+            }
+            if (inner instanceof Map) {
+              const el = inner.get('elementIdentifier') ?? inner.get(0);
+              const val = inner.get('elementValue') ?? inner.get(1);
+              if (el != null) attrs.push({
+                ns: String(nsName), element: String(el),
+                value: val instanceof Uint8Array ? `(${val.length}B bytes)` : JSON.stringify(val),
+                rawVal: val,
+              });
+            }
+          });
+        });
+      }
+      obj.forEach((v, k) => {
+        if (k !== 'nameSpaces' && k !== 3) walk(v, currentNs);
+      });
+    }
+    if (Array.isArray(obj)) obj.forEach(v => walk(v, currentNs));
+    if (obj && '_tag' in obj) walk(obj._val, currentNs);
+  }
+  walk(decoded, '');
+  return attrs;
+}
+
+function loadMockResponse() {
+  // ISO 18013-5 §8 DeviceResponse structure with IssuerSignedItems
+  function makeItem(ns, element, value) {
+    const random = crypto.getRandomValues(new Uint8Array(16));
+    const itemMap = new Map([
+      ['digestID', Math.floor(Math.random()*100)],
+      ['random', random],
+      ['elementIdentifier', element],
+      ['elementValue', value],
+    ]);
+    // wrap as tag(24, bstr(cbor(item)))
+    const itemBytes = encodeCborWithTags(itemMap);
+    return { _tag: 24, _val: itemBytes };
+  }
+  const nsMap = new Map([
+    ['org.iso.23220.photoid.1', [
+      makeItem('org.iso.23220.photoid.1','family_name','Kowalski'),
+      makeItem('org.iso.23220.photoid.1','given_name','Jan'),
+      makeItem('org.iso.23220.photoid.1','birth_date','1990-01-15'),
+      makeItem('org.iso.23220.photoid.1','age_over_18',true),
+      makeItem('org.iso.23220.photoid.1','issuing_country','PL'),
+    ]],
+  ]);
+  const doc = new Map([
+    ['docType','org.iso.23220.photoid.1'],
+    ['issuerSigned', new Map([['nameSpaces', nsMap]])],
+    ['deviceSigned', new Map([['nameSpaces', new Map()]])],
+    ['errors', null],
+  ]);
+  const response = new Map([
+    ['version','1.0'],
+    ['documents', [doc]],
+    ['status', 0],
+  ]);
+  const bytes = encodeCborWithTags(response);
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+  document.getElementById('response-input').value = hex;
+  log('info', `Mock DeviceResponse loaded (${bytes.length}B, 5 PhotoID attributes)`);
+  decodeResponse();
+}
+
+function clearResponse() {
+  document.getElementById('response-input').value = '';
+  document.getElementById('response-results').style.display = 'none';
+  document.getElementById('response-empty').style.display = 'block';
+  document.getElementById('resp-size-badge').style.display = 'none';
+  document.getElementById('resp-error').style.display = 'none';
+}
+
+async function copyRespJson() {
+  const val = document.getElementById('response-json-out').value;
+  if (!val) return;
+  await navigator.clipboard.writeText(val);
+  log('ok', 'JSON copied to clipboard');
+}
+
+async function copyRespHex() {
+  const raw = document.getElementById('response-input').value.trim();
+  if (!raw) return;
+  try {
+    const bytes = parseInputBytes(raw);
+    const hex = Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+    await navigator.clipboard.writeText(hex);
+    log('ok', 'Hex copied to clipboard');
+  } catch(e) { log('err', e.message); }
+}
+
+// ════════════════════════════════════════════════════════════
+// Endpoint bar
+// ════════════════════════════════════════════════════════════
+function syncEndpointUrl(val) {
+  document.getElementById('request-url').value = val;
+  document.getElementById('endpoint-status').textContent = 'not tested';
+  document.getElementById('endpoint-status').style.color = 'var(--text3)';
+}
+
+async function testEndpoint() {
+  const url = document.getElementById('endpoint-bar-url').value.trim();
+  if (!url) return;
+  const statusEl = document.getElementById('endpoint-status');
+  const btn = document.getElementById('test-endpoint-btn');
+  btn.textContent = 'Testing…'; btn.disabled = true;
+  statusEl.textContent = '…'; statusEl.style.color = 'var(--text3)';
+  log('info', `GET ${url}`);
+  try {
+    const res = await fetch(url, { method: 'GET', mode: 'cors', signal: AbortSignal.timeout(5000) });
+    const label = `${res.status} ${res.statusText || 'OK'}`;
+    const ok = res.status < 400;
+    statusEl.textContent = label;
+    statusEl.style.color = ok ? 'var(--green)' : 'var(--amber)';
+    log(ok ? 'ok' : 'warn', `Endpoint responded: ${label}`);
+  } catch(e) {
+    const msg = e.name === 'AbortError' ? 'timeout' : e.message.includes('NetworkError') || e.message.includes('Failed to fetch') ? 'unreachable / CORS' : e.message;
+    statusEl.textContent = msg;
+    statusEl.style.color = 'var(--red)';
+    log('err', `Endpoint test failed: ${msg}`);
+  }
+  btn.textContent = 'Test ↗'; btn.disabled = false;
+}
+
+// ════════════════════════════════════════════════════════════
+// URI copy
+// ════════════════════════════════════════════════════════════
+async function copyUri() {
+  if (!state.mdocUri) return;
+  await navigator.clipboard.writeText(state.mdocUri);
+  log('ok', 'mdoc:// URI copied to clipboard');
+}
+
+// ════════════════════════════════════════════════════════════
+// Tabs
+// ════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['qr','cbor','response','log'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+// Log
+// ════════════════════════════════════════════════════════════
+function log(level, msg) {
+  const panel = document.getElementById('log-panel');
+  const ts = new Date().toISOString().slice(11,23);
+  const line = document.createElement('div');
+  line.className = `log-line ${level}`;
+  line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${escHtml(msg)}</span>`;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLog() { document.getElementById('log-panel').innerHTML = ''; }
+
+// ════════════════════════════════════════════════════════════
+// Session table
+// ════════════════════════════════════════════════════════════
+function updateSessionTable(data) {
+  const tbody = document.getElementById('session-tbody');
+  if (!data) { tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text3)">No session yet</td></tr>'; return; }
+  tbody.innerHTML = Object.entries(data).map(([k,v]) =>
+    `<tr><td>${escHtml(k)}</td><td style="font-family:var(--mono);font-size:11px;word-break:break-all">${escHtml(String(v))}</td></tr>`
+  ).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// Status indicator
+// ════════════════════════════════════════════════════════════
+function setStatus(label, color) {
+  document.getElementById('status-label').textContent = label;
+  document.getElementById('status-dot').style.background = color;
+  document.getElementById('status-dot').style.boxShadow = `0 0 6px ${color}`;
+}
+
+// ════════════════════════════════════════════════════════════
+// Boot
+// ════════════════════════════════════════════════════════════
+init();
+updateSessionTable(null);
+</script>
+</body>
+</html>

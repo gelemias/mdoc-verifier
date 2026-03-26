@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+cbor2
+cryptography
+python-multipart
