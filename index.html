@@ -442,7 +442,6 @@
     <div class="tabs">
       <div class="tab active" onclick="switchTab('qr')">QR / Deep Link</div>
       <div class="tab" onclick="switchTab('cbor')">CBOR Inspector</div>
-      <div class="tab" onclick="switchTab('response')">Response Inspector</div>
       <div class="tab" onclick="switchTab('log')">Log</div>
     </div>
 
@@ -478,6 +477,19 @@
           <div class="empty-state">
             <div class="icon">⬡</div>
             <p>No request generated yet</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Wallet Response</h3>
+          <span id="wallet-response-badge" class="badge info">idle</span>
+        </div>
+        <div class="card-body" id="wallet-response-panel">
+          <div class="empty-state">
+            <div class="icon">⇄</div>
+            <p>Generate a request to start watching for the wallet response</p>
           </div>
         </div>
       </div>
@@ -522,100 +534,6 @@
         <div class="card-body">
           <div class="hex-dump" id="hex-dump-output">—</div>
         </div>
-      </div>
-    </div>
-
-    <!-- Tab: Response Inspector -->
-    <div class="tab-panel" id="tab-response">
-
-      <!-- Input row -->
-      <div class="card">
-        <div class="card-header">
-          <h3>DeviceResponse / any CBOR payload</h3>
-          <div style="display:flex;gap:6px;align-items:center">
-            <span id="resp-size-badge" style="display:none" class="badge info"></span>
-            <button class="btn sm danger" onclick="clearResponse()">Clear</button>
-          </div>
-        </div>
-        <div class="card-body gap-sm">
-          <div>
-            <label>Hex or base64url — paste and decoding starts automatically</label>
-            <textarea id="response-input" rows="4"
-              placeholder="a50068312e31... or base64url from your REST endpoint response body"
-              oninput="onResponseInput(this.value)"
-              style="font-family:var(--mono);font-size:12px"></textarea>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <button class="btn primary" style="width:auto" onclick="decodeResponse()">Decode</button>
-            <button class="btn sm" onclick="loadMockResponse()">Load mock response</button>
-            <div id="resp-error" style="color:var(--red);font-size:12px;display:none"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Results — shown after decode -->
-      <div id="response-results" style="display:none">
-
-        <!-- Meta strip -->
-        <div class="response-meta" id="response-meta"></div>
-
-        <!-- Disclosed attributes (best-effort IssuerSignedItem walk) -->
-        <div class="card" id="attrs-card">
-          <div class="card-header">
-            <h3>Disclosed attributes</h3>
-            <span id="attr-count-badge" class="badge info"></span>
-          </div>
-          <div class="card-body" style="padding:0">
-            <table class="field-table">
-              <thead>
-                <tr>
-                  <th style="width:30%">namespace</th>
-                  <th style="width:28%">elementIdentifier</th>
-                  <th>elementValue</th>
-                </tr>
-              </thead>
-              <tbody id="attr-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Two-column: CBOR tree + Hex dump -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="card">
-            <div class="card-header">
-              <h3>CBOR tree</h3>
-              <button class="btn sm" onclick="copyRespJson()">Copy JSON</button>
-            </div>
-            <div class="card-body" style="overflow:auto;max-height:480px">
-              <div class="cbor-tree" id="response-cbor-tree"></div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <h3>Hex dump</h3>
-              <button class="btn sm" onclick="copyRespHex()">Copy hex</button>
-            </div>
-            <div class="hex-dump" id="response-hex-dump" style="max-height:480px;border:none;border-radius:0;padding:12px 16px">—</div>
-          </div>
-        </div>
-
-        <!-- Full JSON -->
-        <div class="card">
-          <div class="card-header">
-            <h3>JSON representation</h3>
-            <button class="btn sm" onclick="copyRespJson()">Copy</button>
-          </div>
-          <div class="card-body">
-            <textarea id="response-json-out" rows="10" readonly
-              style="font-family:var(--mono);font-size:11px;color:var(--text2);width:100%"></textarea>
-          </div>
-        </div>
-
-      </div>
-
-      <div id="response-empty" class="empty-state">
-        <div style="font-size:28px;margin-bottom:10px;opacity:.3">⬡</div>
-        <p style="color:var(--text3)">Paste a DeviceResponse (hex or base64) above — decoded view appears here</p>
       </div>
     </div>
 
@@ -773,6 +691,8 @@ let state = {
   deviceRequestPayload: null,
   mdocUri: null,
   sessionNonce: null,
+  sessionId: null,
+  sessionStatusTimer: null,
 };
 let qrInstance = null;
 
@@ -1014,6 +934,7 @@ async function generateRequest() {
     state.readerEngagementBytes = reEngBytes;
     state.mdocUri = mdocUri;
     state.sessionNonce = null;
+    state.sessionId = payload.session_id;
     document.getElementById('request-url').value = requestUrl;
     document.getElementById('endpoint-bar-url').value = requestUrl;
     log('ok', `Session created: ${payload.session_id}`);
@@ -1048,6 +969,7 @@ async function generateRequest() {
       'readerEngagement size': reEngBytes.length + ' bytes',
       'backend flow': 'server-owned session',
     });
+    startSessionPolling(payload.session_id);
 
     setStatus('request ready', '#3fb950');
     log('ok', 'DeviceRequest generation complete ✓');
@@ -1252,233 +1174,68 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ════════════════════════════════════════════════════════════
-// Response Verifier
-// ════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════
-// Response Inspector — decode-only
-// ════════════════════════════════════════════════════════════
-let _respDecodeTimer = null;
-function onResponseInput(val) {
-  clearTimeout(_respDecodeTimer);
-  const errEl = document.getElementById('resp-error');
-  errEl.style.display = 'none';
-  if (!val.trim()) { clearResponse(); return; }
-  // Debounce 400ms so it decodes after paste settles
-  _respDecodeTimer = setTimeout(() => decodeResponse(), 400);
+function setWalletResponseState(kind, message, extraHtml='') {
+  const badge = document.getElementById('wallet-response-badge');
+  const panel = document.getElementById('wallet-response-panel');
+  const styles = {
+    idle: ['badge info', 'idle'],
+    waiting: ['badge warn', 'waiting'],
+    connected: ['badge info', 'wallet connected'],
+    received: ['badge ok', 'response received'],
+    done: ['badge ok', 'completed'],
+    error: ['badge err', 'error'],
+  };
+  const [cls, label] = styles[kind] || styles.idle;
+  badge.className = cls;
+  badge.textContent = label;
+  panel.innerHTML = `
+    <div class="gap-sm">
+      <div style="font-size:13px;color:var(--text)">${escHtml(message)}</div>
+      ${extraHtml}
+    </div>
+  `;
 }
 
-function decodeResponse() {
-  const raw = document.getElementById('response-input').value.trim();
-  if (!raw) return;
-  const errEl = document.getElementById('resp-error');
-  errEl.style.display = 'none';
-
-  let bytes;
-  try { bytes = parseInputBytes(raw); }
-  catch(e) {
-    errEl.textContent = e.message; errEl.style.display = 'block';
-    return;
+function stopSessionPolling() {
+  if (state.sessionStatusTimer) {
+    clearInterval(state.sessionStatusTimer);
+    state.sessionStatusTimer = null;
   }
+}
 
+async function pollSessionStatus() {
+  if (!state.sessionId) return;
   try {
-    const decoded = CBOR.decode(bytes);
-    const json = cborToJson(decoded);
+    const res = await fetch(`/mdoc/session/${state.sessionId}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const data = await res.json();
 
-    // -- meta strip --
-    const statusVal = decoded instanceof Map
-      ? (decoded.get('status') ?? decoded.get(0))
-      : (json?.status ?? '—');
-    const docsArr = decoded instanceof Map
-      ? (decoded.get('documents') || decoded.get(4))
-      : null;
-    const docCount = Array.isArray(docsArr) ? docsArr.length : (docsArr ? 1 : '—');
-    // count unique namespaces
-    const attrs = extractAttributes(decoded);
-    const nsSet = new Set(attrs.map(a => a.ns));
-
-    document.getElementById('response-meta').innerHTML = `
-      <div class="meta-card">
-        <div class="label">status</div>
-        <div class="value ${statusVal === 0 ? 'ok' : statusVal === '—' ? '' : 'warn'}">${statusVal === 0 ? '0 · OK' : statusVal}</div>
-      </div>
-      <div class="meta-card">
-        <div class="label">documents</div>
-        <div class="value">${docCount}</div>
-      </div>
-      <div class="meta-card">
-        <div class="label">size</div>
-        <div class="value">${bytes.length} B</div>
-      </div>
-      <div class="meta-card">
-        <div class="label">namespaces</div>
-        <div class="value">${nsSet.size || '—'}</div>
-      </div>
-      <div class="meta-card">
-        <div class="label">attributes</div>
-        <div class="value ${attrs.length > 0 ? 'ok' : ''}">${attrs.length}</div>
-      </div>`;
-
-    // -- size badge in header --
-    const sizeBadge = document.getElementById('resp-size-badge');
-    sizeBadge.textContent = `${bytes.length} B`;
-    sizeBadge.style.display = 'inline-block';
-
-    // -- disclosed attributes table --
-    const tbody = document.getElementById('attr-tbody');
-    const countBadge = document.getElementById('attr-count-badge');
-    tbody.innerHTML = '';
-    if (attrs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:16px">
-        No IssuerSignedItem attributes found — inspect the CBOR tree below for raw structure
-      </td></tr>`;
-      countBadge.textContent = '0';
-    } else {
-      attrs.forEach(a => {
-        const tr = document.createElement('tr');
-        // Render elementValue — handle bytes specially
-        let valDisplay = escHtml(String(a.value));
-        if (a.rawVal instanceof Uint8Array) {
-          const hex = Array.from(a.rawVal).map(b=>b.toString(16).padStart(2,'0')).join('');
-          const preview = hex.length > 40 ? hex.slice(0,40)+'…' : hex;
-          valDisplay = `<span class="cbor-bytes" title="${hex}">h'${preview}'</span>`;
-        } else if (typeof a.rawVal === 'boolean') {
-          valDisplay = `<span class="cbor-bool">${a.rawVal}</span>`;
-        }
-        tr.innerHTML = `
-          <td style="font-size:11px">${escHtml(a.ns)}</td>
-          <td style="font-family:var(--mono);color:var(--accent)">${escHtml(a.element)}</td>
-          <td>${valDisplay}</td>`;
-        tbody.appendChild(tr);
-      });
-      countBadge.textContent = `${attrs.length} fields`;
-    }
-
-    // -- CBOR tree --
-    document.getElementById('response-cbor-tree').innerHTML = renderCborTree(decoded);
-
-    // -- Hex dump --
-    document.getElementById('response-hex-dump').textContent = hexDump(bytes);
-
-    // -- JSON --
-    document.getElementById('response-json-out').value = JSON.stringify(json, null, 2);
-
-    document.getElementById('response-empty').style.display = 'none';
-    document.getElementById('response-results').style.display = 'block';
-    setStatus('decoded', '#3fb950');
-    log('ok', `DeviceResponse decoded: ${bytes.length}B, ${attrs.length} attribute(s), ${nsSet.size} namespace(s)`);
-
-  } catch(e) {
-    errEl.textContent = `CBOR decode error: ${e.message}`; errEl.style.display = 'block';
-    log('err', `Response decode error: ${e.message}`);
-    setStatus('error', '#f85149');
-  }
-}
-
-function extractAttributes(decoded) {
-  const attrs = [];
-  function walk(obj, currentNs) {
-    if (!obj) return;
-    if (obj instanceof Map) {
-      // Look for nameSpaces map (string or int key 3)
-      const nsMap = obj.get('nameSpaces') ?? obj.get(3);
-      if (nsMap instanceof Map) {
-        nsMap.forEach((items, nsName) => {
-          if (!Array.isArray(items)) return;
-          items.forEach(item => {
-            // item may be a bstr wrapping a CBOR map (tag 24), or already decoded
-            let inner = item;
-            if (item && '_tag' in item && item._tag === 24) {
-              try { inner = CBOR.decode(item._val); } catch(e) { inner = null; }
-            }
-            if (inner instanceof Map) {
-              const el = inner.get('elementIdentifier') ?? inner.get(0);
-              const val = inner.get('elementValue') ?? inner.get(1);
-              if (el != null) attrs.push({
-                ns: String(nsName), element: String(el),
-                value: val instanceof Uint8Array ? `(${val.length}B bytes)` : JSON.stringify(val),
-                rawVal: val,
-              });
-            }
-          });
-        });
+    if (data.response_received) {
+      const preview = data.response_hex
+        ? `<div class="uri-display" style="font-size:11px">response hex: ${escHtml(data.response_hex.slice(0, 160))}${data.response_hex.length > 160 ? '…' : ''}</div>`
+        : '';
+      setWalletResponseState('received', 'The wallet sent a follow-up encrypted response to the verifier.', preview);
+      log('ok', 'Wallet response received by backend');
+      if (data.stage >= 2) {
+        setWalletResponseState('done', 'Session completed. The verifier received the wallet response and returned termination status 20.', preview);
+        stopSessionPolling();
       }
-      obj.forEach((v, k) => {
-        if (k !== 'nameSpaces' && k !== 3) walk(v, currentNs);
-      });
+    } else if (data.stage === 1) {
+      setWalletResponseState('connected', 'The wallet accepted the QR and the verifier sent the encrypted DeviceRequest. Waiting for a follow-up response.');
+    } else {
+      setWalletResponseState('waiting', 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
     }
-    if (Array.isArray(obj)) obj.forEach(v => walk(v, currentNs));
-    if (obj && '_tag' in obj) walk(obj._val, currentNs);
+  } catch (e) {
+    setWalletResponseState('error', `Could not fetch session status: ${e.message}`);
   }
-  walk(decoded, '');
-  return attrs;
 }
 
-function loadMockResponse() {
-  // ISO 18013-5 §8 DeviceResponse structure with IssuerSignedItems
-  function makeItem(ns, element, value) {
-    const random = crypto.getRandomValues(new Uint8Array(16));
-    const itemMap = new Map([
-      ['digestID', Math.floor(Math.random()*100)],
-      ['random', random],
-      ['elementIdentifier', element],
-      ['elementValue', value],
-    ]);
-    // wrap as tag(24, bstr(cbor(item)))
-    const itemBytes = encodeCborWithTags(itemMap);
-    return { _tag: 24, _val: itemBytes };
-  }
-  const nsMap = new Map([
-    ['org.iso.23220.photoid.1', [
-      makeItem('org.iso.23220.photoid.1','family_name','Kowalski'),
-      makeItem('org.iso.23220.photoid.1','given_name','Jan'),
-      makeItem('org.iso.23220.photoid.1','birth_date','1990-01-15'),
-      makeItem('org.iso.23220.photoid.1','age_over_18',true),
-      makeItem('org.iso.23220.photoid.1','issuing_country','PL'),
-    ]],
-  ]);
-  const doc = new Map([
-    ['docType','org.iso.23220.photoid.1'],
-    ['issuerSigned', new Map([['nameSpaces', nsMap]])],
-    ['deviceSigned', new Map([['nameSpaces', new Map()]])],
-    ['errors', null],
-  ]);
-  const response = new Map([
-    ['version','1.0'],
-    ['documents', [doc]],
-    ['status', 0],
-  ]);
-  const bytes = encodeCborWithTags(response);
-  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
-  document.getElementById('response-input').value = hex;
-  log('info', `Mock DeviceResponse loaded (${bytes.length}B, 5 PhotoID attributes)`);
-  decodeResponse();
-}
-
-function clearResponse() {
-  document.getElementById('response-input').value = '';
-  document.getElementById('response-results').style.display = 'none';
-  document.getElementById('response-empty').style.display = 'block';
-  document.getElementById('resp-size-badge').style.display = 'none';
-  document.getElementById('resp-error').style.display = 'none';
-}
-
-async function copyRespJson() {
-  const val = document.getElementById('response-json-out').value;
-  if (!val) return;
-  await navigator.clipboard.writeText(val);
-  log('ok', 'JSON copied to clipboard');
-}
-
-async function copyRespHex() {
-  const raw = document.getElementById('response-input').value.trim();
-  if (!raw) return;
-  try {
-    const bytes = parseInputBytes(raw);
-    const hex = Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
-    await navigator.clipboard.writeText(hex);
-    log('ok', 'Hex copied to clipboard');
-  } catch(e) { log('err', e.message); }
+function startSessionPolling(sessionId) {
+  stopSessionPolling();
+  state.sessionId = sessionId;
+  setWalletResponseState('waiting', 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
+  pollSessionStatus();
+  state.sessionStatusTimer = setInterval(pollSessionStatus, 2000);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1528,7 +1285,7 @@ async function copyUri() {
 // ════════════════════════════════════════════════════════════
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const names = ['qr','cbor','response','log'];
+    const names = ['qr','cbor','log'];
     t.classList.toggle('active', names[i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
