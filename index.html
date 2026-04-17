@@ -407,6 +407,10 @@
       <div class="checkbox-grid" id="photoid-elements">
         <!-- injected by JS -->
       </div>
+      <div style="margin-top:10px">
+        <label>Custom PhotoID attributes</label>
+        <input type="text" id="custom-photoid-attributes" placeholder="employee_id, access_level">
+      </div>
     </div>
 
     <div>
@@ -418,6 +422,24 @@
       </div>
       <div class="checkbox-grid" id="mdl-elements" style="opacity:.4;pointer-events:none">
         <!-- injected by JS -->
+      </div>
+      <div style="margin-top:10px">
+        <label>Custom mDL attributes</label>
+        <input type="text" id="custom-mdl-attributes" placeholder="restrictions_code, endorsements" disabled>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Custom Namespace</div>
+      <div class="gap-sm">
+        <div>
+          <label>Namespace</label>
+          <input type="text" id="custom-namespace" placeholder="org.example.employee.1">
+        </div>
+        <div>
+          <label>Attributes</label>
+          <input type="text" id="custom-namespace-attributes" placeholder="employee_id, department">
+        </div>
       </div>
     </div>
 
@@ -717,6 +739,7 @@ function init() {
     const mdl = document.getElementById('mdl-elements');
     mdl.style.opacity = e.target.checked ? '1' : '.4';
     mdl.style.pointerEvents = e.target.checked ? 'auto' : 'none';
+    document.getElementById('custom-mdl-attributes').disabled = !e.target.checked;
   });
   document.getElementById('doc-type').addEventListener('change', e => {
     document.getElementById('custom-doctype-row').style.display = e.target.value === 'custom' ? 'block' : 'none';
@@ -746,6 +769,17 @@ function getCheckedElements(containerId) {
   const result = {};
   checks.forEach(c => { if (c.checked) result[c.nextElementSibling.textContent] = false; });
   return result;
+}
+
+function parseCustomAttributes(raw) {
+  return Array.from(
+    new Set(
+      raw
+        .split(/[,\n]/)
+        .map(value => value.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 // ════════════════════════════════════════════════════════════
@@ -905,12 +939,30 @@ async function generateRequest() {
     const docType = docTypeSel === 'custom' ? document.getElementById('custom-doc-type').value.trim() : docTypeSel;
     const includeMdl = document.getElementById('include-mdl').checked;
 
-    const photoidNs = docType === 'org.iso.23220.photoid.1' ? 'org.iso.23220.1' : 'org.iso.18013.5.1';
     const selectedPhotoid = Object.keys(getCheckedElements('photoid-elements'));
     const selectedMdl = includeMdl ? Object.keys(getCheckedElements('mdl-elements')) : [];
+    const customPhotoidAttributes = parseCustomAttributes(document.getElementById('custom-photoid-attributes').value);
+    const customMdlAttributes = includeMdl
+      ? parseCustomAttributes(document.getElementById('custom-mdl-attributes').value)
+      : [];
+    const customNamespace = document.getElementById('custom-namespace').value.trim();
+    const customNamespaceAttributes = parseCustomAttributes(document.getElementById('custom-namespace-attributes').value);
+    const requestedElements = Array.from(new Set([...selectedPhotoid, ...customPhotoidAttributes]));
+    const requestedMdlElements = Array.from(new Set([...selectedMdl, ...customMdlAttributes]));
+    const requestedNamespaces = [
+      { name: 'org.iso.23220.1', elements: requestedElements },
+      ...(requestedMdlElements.length ? [{ name: 'org.iso.18013.5.1', elements: requestedMdlElements }] : []),
+      ...(customNamespace && customNamespaceAttributes.length ? [{ name: customNamespace, elements: customNamespaceAttributes }] : []),
+    ];
 
     log('info', `Creating server session for ${docType}`);
-    log('info', `Elements: ${selectedPhotoid.join(', ')}`);
+    log('info', `PhotoID elements: ${requestedElements.join(', ') || 'none'}`);
+    if (requestedMdlElements.length) {
+      log('info', `mDL elements: ${requestedMdlElements.join(', ')}`);
+    }
+    if (customNamespace && customNamespaceAttributes.length) {
+      log('info', `Custom namespace ${customNamespace}: ${customNamespaceAttributes.join(', ')}`);
+    }
 
     const res = await fetch('/mdoc/session', {
       method: 'POST',
@@ -921,6 +973,10 @@ async function generateRequest() {
         include_mdl: includeMdl,
         photoid_elements: selectedPhotoid,
         mdl_elements: selectedMdl,
+        custom_photoid_attributes: customPhotoidAttributes,
+        custom_mdl_attributes: customMdlAttributes,
+        custom_namespace: customNamespace,
+        custom_namespace_attributes: customNamespaceAttributes,
       }),
     });
     if (!res.ok) {
@@ -954,12 +1010,10 @@ async function generateRequest() {
     // 8. Request summary
     renderRequestSummary({
       docType, requestUrl, verifierId,
-      elements: selectedPhotoid,
-      mdlElements: selectedMdl,
+      requestedNamespaces,
       reEngSize: reEngBytes.length,
       itemsReqSize: 0,
       readerAuthSize: 0,
-      ns: photoidNs,
     });
 
     updateSessionTable({
@@ -1017,16 +1071,17 @@ function openDeeplink(e) {
 // ════════════════════════════════════════════════════════════
 // Request summary renderer
 // ════════════════════════════════════════════════════════════
-function renderRequestSummary({ docType, requestUrl, verifierId, elements, mdlElements, reEngSize, itemsReqSize, readerAuthSize, ns }) {
+function renderRequestSummary({ docType, requestUrl, verifierId, requestedNamespaces, reEngSize, itemsReqSize, readerAuthSize }) {
   const el = document.getElementById('request-summary');
   el.innerHTML = `
     <table class="field-table">
       <tr><td>docType</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px;color:var(--accent)">${docType}</code></td></tr>
       <tr><td>request_url</td><td colspan="2" style="word-break:break-all">${requestUrl}</td></tr>
-      <tr><td>verifier ID</td><td colspan="2">${verifierId}</td></tr>
-      <tr><td>namespace</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${ns}</code></td></tr>
-      <tr><td>elements requested</td><td colspan="2">${elements.map(e => `<span class="badge info" style="margin:1px">${e}</span>`).join('')}</td></tr>
-      ${mdlElements.length ? `<tr><td>mdl elements</td><td colspan="2">${mdlElements.map(e => `<span class="badge info" style="margin:1px">${e}</span>`).join('')}</td></tr>` : ''}
+      <tr><td>verifier ID</td><td colspan="2">${escHtml(verifierId)}</td></tr>
+      ${requestedNamespaces.map(({ name, elements }) => `
+        <tr><td>namespace</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${escHtml(name)}</code></td></tr>
+        <tr><td>elements requested</td><td colspan="2">${elements.map(e => `<span class="badge info" style="margin:1px">${escHtml(e)}</span>`).join('')}</td></tr>
+      `).join('')}
       <tr><td>ReaderEngagement</td><td colspan="2">${reEngSize} bytes</td></tr>
       <tr><td>ItemsRequest</td><td colspan="2">${itemsReqSize} bytes</td></tr>
       <tr><td>COSE_Sign1</td><td colspan="2">${readerAuthSize} bytes</td></tr>
@@ -1174,6 +1229,28 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function renderSharedAttributes(sharedAttributes) {
+  const namespaces = Object.entries(sharedAttributes || {}).filter(([, values]) => Object.keys(values || {}).length);
+  if (!namespaces.length) return '';
+
+  return `
+    <div class="gap-sm">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Shared attributes</div>
+      <table class="field-table">
+        ${namespaces.map(([namespace, values]) => `
+          <tr><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${escHtml(namespace)}</code></td></tr>
+          ${Object.entries(values).map(([name, value]) => `
+            <tr>
+              <td>${escHtml(name)}</td>
+              <td style="font-family:var(--mono);font-size:11px;word-break:break-word">${escHtml(JSON.stringify(value))}</td>
+            </tr>
+          `).join('')}
+        `).join('')}
+      </table>
+    </div>
+  `;
+}
+
 function setWalletResponseState(kind, message, extraHtml='') {
   const badge = document.getElementById('wallet-response-badge');
   const panel = document.getElementById('wallet-response-panel');
@@ -1211,13 +1288,15 @@ async function pollSessionStatus() {
     const data = await res.json();
 
     if (data.response_received) {
+      const sharedAttributes = renderSharedAttributes(data.shared_attributes);
       const preview = data.response_hex
         ? `<div class="uri-display" style="font-size:11px">response hex: ${escHtml(data.response_hex.slice(0, 160))}${data.response_hex.length > 160 ? '…' : ''}</div>`
         : '';
-      setWalletResponseState('received', 'The wallet sent a follow-up encrypted response to the verifier.', preview);
+      const extra = `${sharedAttributes}${preview}`;
+      setWalletResponseState('received', 'The wallet sent a follow-up encrypted response to the verifier.', extra);
       log('ok', 'Wallet response received by backend');
       if (data.stage >= 2) {
-        setWalletResponseState('done', 'Session completed. The verifier received the wallet response and returned termination status 20.', preview);
+        setWalletResponseState('done', 'Session completed. The verifier received the wallet response and sent the protocol termination acknowledgement.', extra);
         stopSessionPolling();
       }
     } else if (data.stage === 1) {

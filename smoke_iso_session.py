@@ -20,6 +20,9 @@ def main() -> None:
             "include_mdl": False,
             "photoid_elements": ["family_name", "given_name"],
             "mdl_elements": [],
+            "custom_photoid_attributes": ["employee_id"],
+            "custom_namespace": "org.example.employee.1",
+            "custom_namespace_attributes": ["department"],
         },
     )
     create.raise_for_status()
@@ -52,8 +55,13 @@ def main() -> None:
     first_payload = cbor2.loads(first.content)
     device_request = AESGCM(sk_reader).decrypt(make_iv("reader_encrypt", 1), first_payload["data"], None)
     decoded_request = cbor2.loads(device_request)
-    doc_type = cbor2.loads(decoded_request["docRequests"][0]["itemsRequest"].value)["docType"]
+    items_request = cbor2.loads(decoded_request["docRequests"][0]["itemsRequest"].value)
+    doc_type = items_request["docType"]
+    requested_elements = items_request["nameSpaces"]["org.iso.23220.1"]
+    custom_namespace_elements = items_request["nameSpaces"]["org.example.employee.1"]
     print("Decrypted docType:", doc_type)
+    print("Custom attribute requested:", "employee_id" in requested_elements)
+    print("Custom namespace requested:", "department" in custom_namespace_elements)
 
     followup = cbor2.dumps(
         {"data": AESGCM(sk_device).encrypt(make_iv("reader_decrypt", 1), b"dummy-device-response", None)}

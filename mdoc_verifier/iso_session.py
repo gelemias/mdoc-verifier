@@ -161,6 +161,73 @@ def decrypt_session_data(message_data: bytes, key: bytes, counter: int) -> tuple
     return plaintext, status
 
 
+def _decode_issuer_signed_item(item: Any) -> tuple[str | None, Any | None]:
+    if isinstance(item, cbor2.CBORTag) and item.tag == CBOR_TAG_ENCODED and isinstance(item.value, bytes):
+        item = cbor2.loads(item.value)
+    elif isinstance(item, bytes):
+        item = cbor2.loads(item)
+
+    if not isinstance(item, dict):
+        return None, None
+    return item.get("elementIdentifier"), item.get("elementValue")
+
+
+def _json_safe_value(value: Any) -> Any:
+    if isinstance(value, bytes):
+        return {"type": "bytes", "hex": value.hex()}
+    if isinstance(value, cbor2.CBORTag):
+        return {
+            "type": "cbor_tag",
+            "tag": value.tag,
+            "value": _json_safe_value(value.value),
+        }
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe_value(item) for item in value]
+    return value
+
+
+def extract_shared_attributes(response_plaintext: bytes | None) -> dict[str, dict[str, Any]]:
+    if not response_plaintext:
+        return {}
+
+    try:
+        decoded = cbor2.loads(response_plaintext)
+    except Exception:
+        return {}
+    if not isinstance(decoded, dict):
+        return {}
+
+    documents = decoded.get("documents")
+    if not isinstance(documents, list):
+        return {}
+
+    shared: dict[str, dict[str, Any]] = {}
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        issuer_signed = document.get("issuerSigned")
+        if not isinstance(issuer_signed, dict):
+            continue
+        name_spaces = issuer_signed.get("nameSpaces")
+        if not isinstance(name_spaces, dict):
+            continue
+
+        for namespace, items in name_spaces.items():
+            if not isinstance(namespace, str) or not isinstance(items, list):
+                continue
+            namespace_items = shared.setdefault(namespace, {})
+            for item in items:
+                key, value = _decode_issuer_signed_item(item)
+                if key is not None:
+                    namespace_items[key] = _json_safe_value(value)
+
+    return shared
+
+
 def build_device_request(
     doc_type: str,
     requested_elements: dict[str, dict[str, bool]],
@@ -185,18 +252,35 @@ def default_requested_elements(
     doc_type: str,
     photoid_elements: list[str],
     mdl_elements: list[str],
+    custom_attributes: list[str],
+    custom_photoid_attributes: list[str],
+    custom_mdl_attributes: list[str],
+    custom_namespace: str,
+    custom_namespace_attributes: list[str],
     include_mdl: bool,
 ) -> dict[str, dict[str, bool]]:
+    primary_elements = list(
+        dict.fromkeys([*photoid_elements, *custom_attributes, *custom_photoid_attributes])
+    )
+    secondary_mdl_elements = list(dict.fromkeys([*mdl_elements, *custom_mdl_attributes]))
     requests: dict[str, dict[str, bool]] = {}
-    if doc_type == PHOTO_ID_DOCTYPE:
-        requests[PHOTO_ID_NAMESPACE] = {name: False for name in photoid_elements}
-    elif doc_type == MDL_DOCTYPE:
-        requests[MDL_NAMESPACE] = {name: False for name in mdl_elements}
-    else:
-        requests[PHOTO_ID_NAMESPACE] = {name: False for name in photoid_elements}
 
-    if include_mdl and doc_type != MDL_DOCTYPE and mdl_elements:
-        requests[MDL_NAMESPACE] = {name: False for name in mdl_elements}
+    def add_namespace(namespace: str, elements: list[str]) -> None:
+        if not namespace or not elements:
+            return
+        namespace_items = requests.setdefault(namespace, {})
+        namespace_items.update({name: False for name in elements})
+
+    if doc_type == PHOTO_ID_DOCTYPE:
+        add_namespace(PHOTO_ID_NAMESPACE, primary_elements)
+    elif doc_type == MDL_DOCTYPE:
+        add_namespace(MDL_NAMESPACE, secondary_mdl_elements)
+    else:
+        add_namespace(PHOTO_ID_NAMESPACE, primary_elements)
+
+    if include_mdl and doc_type != MDL_DOCTYPE:
+        add_namespace(MDL_NAMESPACE, secondary_mdl_elements)
+    add_namespace(custom_namespace.strip(), custom_namespace_attributes)
     return requests
 
 
@@ -207,6 +291,11 @@ class SessionConfig:
     include_mdl: bool
     photoid_elements: list[str] = field(default_factory=list)
     mdl_elements: list[str] = field(default_factory=list)
+    custom_attributes: list[str] = field(default_factory=list)
+    custom_photoid_attributes: list[str] = field(default_factory=list)
+    custom_mdl_attributes: list[str] = field(default_factory=list)
+    custom_namespace: str = ""
+    custom_namespace_attributes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -227,6 +316,7 @@ class SessionState:
     sk_device: bytes | None = None
     sk_reader: bytes | None = None
     response_plaintext: bytes | None = None
+    shared_attributes: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def create_initial_response(self, message_data: bytes) -> bytes:
         device_engagement = parse_device_engagement_message(message_data)
@@ -245,6 +335,11 @@ class SessionState:
             self.config.doc_type,
             self.config.photoid_elements,
             self.config.mdl_elements,
+            self.config.custom_attributes,
+            self.config.custom_photoid_attributes,
+            self.config.custom_mdl_attributes,
+            self.config.custom_namespace,
+            self.config.custom_namespace_attributes,
             self.config.include_mdl,
         )
         device_request = build_device_request(self.config.doc_type, requested)
@@ -256,6 +351,7 @@ class SessionState:
             raise ValueError("Session keys are not established")
         plaintext, _status = decrypt_session_data(message_data, self.sk_device, counter=1)
         self.response_plaintext = plaintext
+        self.shared_attributes = extract_shared_attributes(plaintext)
         self.stage = 2
         return cbor2.dumps({"status": 20})
 

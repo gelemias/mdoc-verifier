@@ -159,6 +159,7 @@ This test:
 From the home page you can:
 
 - choose a `docType`
+- enter custom attributes for the primary namespace and optional custom mDL attributes
 - toggle whether mDL elements are included
 - select the desired PhotoID and mDL data elements
 - create a new backend session

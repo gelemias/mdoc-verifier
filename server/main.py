@@ -46,6 +46,11 @@ class SessionCreateRequest(BaseModel):
             "issuing_country",
         ]
     )
+    custom_attributes: list[str] = Field(default_factory=list)
+    custom_photoid_attributes: list[str] = Field(default_factory=list)
+    custom_mdl_attributes: list[str] = Field(default_factory=list)
+    custom_namespace: str = ""
+    custom_namespace_attributes: list[str] = Field(default_factory=list)
 
 
 SESSIONS: dict[str, SessionState] = {}
@@ -69,6 +74,11 @@ def create_session(config: SessionCreateRequest, request: Request):
             include_mdl=config.include_mdl,
             photoid_elements=config.photoid_elements,
             mdl_elements=config.mdl_elements,
+            custom_attributes=config.custom_attributes,
+            custom_photoid_attributes=config.custom_photoid_attributes,
+            custom_mdl_attributes=config.custom_mdl_attributes,
+            custom_namespace=config.custom_namespace,
+            custom_namespace_attributes=config.custom_namespace_attributes,
         ),
     )
     SESSIONS[session_id] = state
@@ -81,6 +91,11 @@ def create_session(config: SessionCreateRequest, request: Request):
         "include_mdl": config.include_mdl,
         "photoid_elements": config.photoid_elements,
         "mdl_elements": config.mdl_elements,
+        "custom_attributes": config.custom_attributes,
+        "custom_photoid_attributes": config.custom_photoid_attributes,
+        "custom_mdl_attributes": config.custom_mdl_attributes,
+        "custom_namespace": config.custom_namespace,
+        "custom_namespace_attributes": config.custom_namespace_attributes,
         "reader_engagement_hex": state.reader_engagement.hex(),
         "reader_engagement_size": len(state.reader_engagement),
         "reader_public_key_hex": export_public_key_hex(state.reader_public_key),
@@ -106,6 +121,7 @@ def session_status(session_id: str):
         "stage": state.stage,
         "response_received": state.response_plaintext is not None,
         "response_hex": state.response_plaintext.hex() if state.response_plaintext else None,
+        "shared_attributes": state.shared_attributes,
         "debug_session_transcript_hex": state.session_transcript.hex() if state.session_transcript else None,
         "debug_transcript_salt_hex": state.transcript_salt.hex() if state.transcript_salt else None,
         "debug_shared_secret_hex": state.shared_secret.hex() if state.shared_secret else None,
