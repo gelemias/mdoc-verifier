@@ -403,7 +403,7 @@
     <hr class="divider">
 
     <div>
-      <div class="section-label">Namespace: org.iso.23220.photoid.1</div>
+      <div class="section-label">Namespace: org.iso.23220.1</div>
       <div class="checkbox-grid" id="photoid-elements">
         <!-- injected by JS -->
       </div>
@@ -1229,6 +1229,40 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function hexToBase64(hex) {
+  const pairs = hex.match(/.{1,2}/g) || [];
+  let binary = '';
+  pairs.forEach(pair => {
+    binary += String.fromCharCode(parseInt(pair, 16));
+  });
+  return btoa(binary);
+}
+
+function detectImageMimeFromHex(hex) {
+  const normalized = (hex || '').toLowerCase();
+  if (normalized.startsWith('89504e470d0a1a0a')) return 'image/png';
+  if (normalized.startsWith('ffd8ff')) return 'image/jpeg';
+  if (normalized.startsWith('47494638')) return 'image/gif';
+  if (normalized.startsWith('52494646') && normalized.slice(16, 24) === '57454250') return 'image/webp';
+  return null;
+}
+
+function renderSharedAttributeValue(name, value) {
+  if (value && typeof value === 'object' && value.type === 'bytes' && typeof value.hex === 'string') {
+    const mime = detectImageMimeFromHex(value.hex);
+    const looksLikePortrait = /portrait|image|photo/i.test(name);
+    if (mime && looksLikePortrait) {
+      const src = `data:${mime};base64,${hexToBase64(value.hex)}`;
+      return `
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <img src="${src}" alt="${escHtml(name)}" style="max-width:180px;max-height:220px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);object-fit:contain">
+        </div>
+      `;
+    }
+  }
+  return `<div style="font-family:var(--mono);font-size:11px;word-break:break-word">${escHtml(JSON.stringify(value))}</div>`;
+}
+
 function renderSharedAttributes(sharedAttributes) {
   const namespaces = Object.entries(sharedAttributes || {}).filter(([, values]) => Object.keys(values || {}).length);
   if (!namespaces.length) return '';
@@ -1242,7 +1276,7 @@ function renderSharedAttributes(sharedAttributes) {
           ${Object.entries(values).map(([name, value]) => `
             <tr>
               <td>${escHtml(name)}</td>
-              <td style="font-family:var(--mono);font-size:11px;word-break:break-word">${escHtml(JSON.stringify(value))}</td>
+              <td>${renderSharedAttributeValue(name, value)}</td>
             </tr>
           `).join('')}
         `).join('')}
