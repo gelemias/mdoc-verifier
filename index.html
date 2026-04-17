@@ -377,7 +377,14 @@
       <div class="section-label">Presentation Request</div>
       <div class="gap-sm">
         <div>
-          <label>Request URL (request_url)</label>
+          <label>Protocol</label>
+          <select id="protocol-mode">
+            <option value="mdoc">URI scheme / QR (existing demo)</option>
+            <option value="annex_c">Digital Credentials API / Annex C</option>
+          </select>
+        </div>
+        <div>
+          <label id="request-url-label">Request URL (request_url)</label>
           <input type="url" id="request-url" value="" placeholder="https://..."
           oninput="document.getElementById('endpoint-bar-url').value=this.value; document.getElementById('endpoint-status').textContent='not tested'; document.getElementById('endpoint-status').style.color='var(--text3)'">
         </div>
@@ -385,7 +392,7 @@
           <label>Verifier ID</label>
           <input type="text" id="verifier-id" value="urn:example:verifier">
         </div>
-        <div>
+        <div id="doc-type-wrap">
           <label>Doc Type</label>
           <select id="doc-type">
             <option value="org.iso.23220.photoid.1">org.iso.23220.photoid.1</option>
@@ -471,22 +478,25 @@
     <div class="tab-panel active" id="tab-qr">
       <div class="card">
         <div class="card-header">
-          <h3>ReaderEngagement QR Code</h3>
+          <h3 id="transport-card-title">ReaderEngagement QR Code</h3>
           <button class="btn sm" id="download-qr-btn" onclick="downloadQR()" style="display:none">↓ PNG</button>
-          <button class="btn sm" id="copy-uri-btn" onclick="copyUri()" style="display:none">Copy URI</button>
+          <button class="btn sm" id="copy-uri-btn" onclick="copyCurrentTransportValue()" style="display:none">Copy URI</button>
         </div>
         <div id="qr-container">
           <div id="qr-box">
             <div class="placeholder">Generate a request<br>to see QR code</div>
           </div>
           <div id="mdoc-uri-panel" style="display:none;width:100%">
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">mdoc:// URI (ISO 18013-7 §8.3.3.1.2)</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;" id="transport-value-label">mdoc:// URI (ISO 18013-7 §8.3.3.1.2)</div>
             <div class="uri-display" id="uri-display"></div>
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
               <a id="open-deeplink" href="#" class="btn sm" onclick="openDeeplink(event)">
                 Open on this device ↗
               </a>
-              <button class="btn sm" onclick="copyUri()">Copy URI</button>
+              <button class="btn sm" id="launch-dcapi-btn" onclick="launchStoredAnnexCRequest()" style="display:none">
+                Present From This Device
+              </button>
+              <button class="btn sm" onclick="copyCurrentTransportValue()" id="copy-transport-inline-btn">Copy URI</button>
               <button class="btn sm" onclick="generateRequest()">↺ Regenerate</button>
             </div>
           </div>
@@ -512,6 +522,19 @@
           <div class="empty-state">
             <div class="icon">⇄</div>
             <p>Generate a request to start watching for the wallet response</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Annex C Debug</h3>
+          <span id="annexc-debug-badge" class="badge info">idle</span>
+        </div>
+        <div class="card-body" id="annexc-debug-panel">
+          <div class="empty-state">
+            <div class="icon">⌁</div>
+            <p>Generate an Annex C request to capture environment and request diagnostics</p>
           </div>
         </div>
       </div>
@@ -715,6 +738,11 @@ let state = {
   sessionNonce: null,
   sessionId: null,
   sessionStatusTimer: null,
+  activeProtocol: 'mdoc',
+  transportValue: null,
+  annexCDeviceRequestB64: null,
+  annexCRequestPayload: null,
+  annexCDebug: null,
 };
 let qrInstance = null;
 
@@ -744,10 +772,15 @@ function init() {
   document.getElementById('doc-type').addEventListener('change', e => {
     document.getElementById('custom-doctype-row').style.display = e.target.value === 'custom' ? 'block' : 'none';
   });
+  document.getElementById('protocol-mode').addEventListener('change', e => {
+    state.activeProtocol = e.target.value;
+    updateProtocolModeUi();
+  });
 
   log('info', 'ISO 18013-7 Verifier Tester initialised (in-browser crypto)');
   log('info', 'Ephemeral key pair will be generated on each DeviceRequest');
   updateSessionTable();
+  updateProtocolModeUi();
 }
 
 function buildCheckboxes(containerId, elements, defaultChecked) {
@@ -790,6 +823,279 @@ function regenerateNonce() {
   const hex = Array.from(state.nonce).map(b => b.toString(16).padStart(2,'0')).join('');
   document.getElementById('nonce-val').textContent = hex;
   log('info', `Nonce regenerated: ${hex.slice(0,16)}…`);
+}
+
+function updateProtocolModeUi() {
+  const mode = document.getElementById('protocol-mode').value;
+  state.activeProtocol = mode;
+  const isAnnexC = mode === 'annex_c';
+  document.getElementById('request-url-label').textContent = isAnnexC ? 'Response endpoint (generated by backend)' : 'Request URL (request_url)';
+  document.getElementById('request-url').placeholder = isAnnexC ? 'Generated after session creation' : 'https://...';
+  document.getElementById('request-url').readOnly = isAnnexC;
+  document.getElementById('transport-card-title').textContent = isAnnexC ? 'Digital Credentials API Request' : 'ReaderEngagement QR Code';
+  document.getElementById('generate-btn').lastChild.textContent = isAnnexC ? ' Generate Annex C Request' : ' Generate DeviceRequest';
+  document.getElementById('doc-type-wrap').style.opacity = isAnnexC ? '.6' : '1';
+  document.getElementById('doc-type').disabled = isAnnexC;
+  document.getElementById('custom-doctype-row').style.display = !isAnnexC && document.getElementById('doc-type').value === 'custom' ? 'block' : 'none';
+  document.getElementById('include-mdl').disabled = isAnnexC;
+  document.getElementById('custom-mdl-attributes').disabled = isAnnexC || !document.getElementById('include-mdl').checked;
+  document.getElementById('mdl-elements').style.opacity = isAnnexC ? '.2' : (document.getElementById('include-mdl').checked ? '1' : '.4');
+  document.getElementById('mdl-elements').style.pointerEvents = isAnnexC ? 'none' : (document.getElementById('include-mdl').checked ? 'auto' : 'none');
+  if (isAnnexC) {
+    document.getElementById('request-url').value = '';
+    document.getElementById('endpoint-bar-url').value = `${window.location.origin}/dc/session`;
+  } else {
+    document.getElementById('request-url').value = `${window.location.origin}/mdoc/request`;
+    document.getElementById('endpoint-bar-url').value = `${window.location.origin}/mdoc/request`;
+  }
+  document.getElementById('endpoint-status').textContent = 'not tested';
+  document.getElementById('endpoint-status').style.color = 'var(--text3)';
+  resetTransportPanel(isAnnexC);
+}
+
+function resetTransportPanel(isAnnexC) {
+  stopSessionPolling();
+  state.sessionId = null;
+  state.transportValue = null;
+  state.annexCDeviceRequestB64 = null;
+  state.annexCRequestPayload = null;
+  state.annexCDebug = null;
+  state.mdocUri = null;
+  const qrBox = document.getElementById('qr-box');
+  qrBox.innerHTML = isAnnexC
+    ? '<div class="placeholder">Generate a request<br>to see Annex C payload</div>'
+    : '<div class="placeholder">Generate a request<br>to see QR code</div>';
+  document.getElementById('mdoc-uri-panel').style.display = 'none';
+  document.getElementById('download-qr-btn').style.display = 'none';
+  document.getElementById('copy-uri-btn').style.display = 'none';
+  document.getElementById('open-deeplink').style.display = isAnnexC ? 'none' : 'inline-flex';
+  document.getElementById('launch-dcapi-btn').style.display = 'none';
+  document.getElementById('copy-transport-inline-btn').textContent = isAnnexC ? 'Copy Request JSON' : 'Copy URI';
+  document.getElementById('copy-uri-btn').textContent = isAnnexC ? 'Copy Request JSON' : 'Copy URI';
+  document.getElementById('transport-value-label').textContent = isAnnexC
+    ? 'Digital Credentials API request object'
+    : 'mdoc:// URI (ISO 18013-7 §8.3.3.1.2)';
+  setWalletResponseState('idle', isAnnexC
+    ? 'Generate a request to start watching for a Digital Credentials API response.'
+    : 'Generate a request to start watching for the wallet response.');
+  renderAnnexCDebug();
+}
+
+function canUseDigitalCredentialsApi() {
+  return typeof window.DigitalCredential !== 'undefined'
+    && typeof navigator.credentials?.get === 'function';
+}
+
+function allowsMdocProtocol() {
+  if (typeof window.DigitalCredential === 'undefined') return false;
+  if (typeof window.DigitalCredential.userAgentAllowsProtocol !== 'function') return true;
+  try {
+    return window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
+  } catch (_err) {
+    return false;
+  }
+}
+
+function currentAnnexCEnvironment() {
+  let protocolAllowed = null;
+  let allowsError = null;
+  if (typeof window.DigitalCredential !== 'undefined' && typeof window.DigitalCredential.userAgentAllowsProtocol === 'function') {
+    try {
+      protocolAllowed = window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
+    } catch (err) {
+      allowsError = err && typeof err.message === 'string' ? err.message : String(err);
+    }
+  }
+  return {
+    timestamp: new Date().toISOString(),
+    origin: window.location.origin,
+    href: window.location.href,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform || '',
+    language: navigator.language || '',
+    languages: navigator.languages || [],
+    secureContext: window.isSecureContext,
+    digitalCredentialPresent: typeof window.DigitalCredential !== 'undefined',
+    credentialsGetPresent: typeof navigator.credentials?.get === 'function',
+    userAgentAllowsProtocolPresent: typeof window.DigitalCredential?.userAgentAllowsProtocol === 'function',
+    orgIsoMdocAllowed: protocolAllowed,
+    orgIsoMdocAllowedError: allowsError,
+  };
+}
+
+function updateAnnexCDebug(patch = {}, phase = null) {
+  const existing = state.annexCDebug || {};
+  state.annexCDebug = {
+    ...existing,
+    ...patch,
+    environment: {
+      ...(existing.environment || {}),
+      ...currentAnnexCEnvironment(),
+      ...(patch.environment || {}),
+    },
+  };
+  if (phase) {
+    state.annexCDebug.phase = phase;
+  }
+  renderAnnexCDebug();
+}
+
+function renderAnnexCDebug() {
+  const badge = document.getElementById('annexc-debug-badge');
+  const panel = document.getElementById('annexc-debug-panel');
+  const debug = state.annexCDebug;
+  if (!debug) {
+    badge.className = 'badge info';
+    badge.textContent = 'idle';
+    panel.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">⌁</div>
+        <p>Generate an Annex C request to capture environment and request diagnostics</p>
+      </div>
+    `;
+    return;
+  }
+
+  const phase = debug.phase || 'captured';
+  badge.className = debug.lastError ? 'badge err' : 'badge info';
+  badge.textContent = phase;
+
+  const sections = [
+    ['Environment', debug.environment],
+    ['Session', debug.session],
+    ['Selected Claims', debug.selection],
+    ['Request Payload', debug.requestPayload],
+    ['Last DC API Result', debug.lastResult],
+    ['Last Error', debug.lastError],
+  ].filter(([, value]) => value && (!(typeof value === 'object') || Object.keys(value).length));
+
+  panel.innerHTML = sections.map(([title, value]) => `
+    <div class="gap-sm" style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${escHtml(title)}</div>
+      <div class="uri-display" style="max-height:220px;overflow:auto;white-space:pre-wrap">${escHtml(safeJsonStringify(value))}</div>
+    </div>
+  `).join('') || `
+    <div class="empty-state">
+      <div class="icon">⌁</div>
+      <p>No Annex C diagnostics captured yet</p>
+    </div>
+  `;
+}
+
+function normalizeDigitalCredentialPayload(credential) {
+  if (!credential || typeof credential !== 'object') {
+    throw new Error('Browser returned an empty Digital Credential response');
+  }
+  if (credential.data && typeof credential.data === 'object') {
+    if (typeof credential.data.response === 'string') {
+      return credential;
+    }
+    if (typeof credential.data.enc === 'string' && typeof credential.data.cipherText === 'string') {
+      return credential;
+    }
+  }
+  if (typeof credential.response === 'string') {
+    return {
+      protocol: credential.protocol || 'org-iso-mdoc',
+      data: {
+        response: credential.response,
+      },
+    };
+  }
+  if (typeof credential.enc === 'string' && typeof credential.cipherText === 'string') {
+    return {
+      protocol: credential.protocol || 'org-iso-mdoc',
+      data: {
+        enc: credential.enc,
+        cipherText: credential.cipherText,
+      },
+    };
+  }
+  throw new Error('Digital Credential response did not include Annex C data.response or enc/cipherText data');
+}
+
+async function triggerAnnexCPresentation(requestPayload) {
+  if (!canUseDigitalCredentialsApi()) {
+    updateAnnexCDebug({
+      lastError: {
+        stage: 'preflight',
+        message: 'Digital Credentials API is not available in this browser',
+      },
+    }, 'preflight_failed');
+    setWalletResponseState('waiting', 'Digital Credentials API is not available in this browser. The Annex C request was generated, but the browser cannot launch a wallet/provider flow here.');
+    log('warn', 'Digital Credentials API is unavailable in this browser');
+    return;
+  }
+  if (!allowsMdocProtocol()) {
+    updateAnnexCDebug({
+      lastError: {
+        stage: 'preflight',
+        message: 'Browser reported org-iso-mdoc is not allowed',
+      },
+    }, 'preflight_failed');
+    setWalletResponseState('waiting', 'This browser does not allow the org-iso-mdoc protocol. The Annex C request was generated, but no browser-mediated launch is available.');
+    log('warn', 'Browser reported org-iso-mdoc is not allowed');
+    return;
+  }
+
+  updateAnnexCDebug({
+    lastError: null,
+    lastResult: {
+      stage: 'before_credentials_get',
+      requestProtocols: (requestPayload.requests || []).map(item => item.protocol),
+    },
+  }, 'launching');
+  setWalletResponseState('waiting', 'Launching the browser Digital Credentials flow. If a provider is available, the native chooser/sheet should appear.');
+  log('info', 'Calling navigator.credentials.get() for org-iso-mdoc');
+
+  try {
+    const credential = await navigator.credentials.get({
+      mediation: 'required',
+      digital: requestPayload,
+    });
+    updateAnnexCDebug({
+      lastResult: {
+        stage: 'credentials_get_resolved',
+        credential: credential,
+      },
+      lastError: null,
+    }, 'response_received');
+    const normalized = normalizeDigitalCredentialPayload(credential);
+    log('ok', 'Digital Credentials API returned a response payload');
+
+    const res = await fetch(`/dc/response/${state.sessionId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(normalized),
+    });
+    if (!res.ok) {
+      throw new Error(`Verifier response upload failed: ${res.status}`);
+    }
+    log('ok', 'Digital credential response sent to verifier backend');
+    await pollSessionStatus('annex_c');
+  } catch (err) {
+    const message = err && typeof err.message === 'string' ? err.message : String(err);
+    updateAnnexCDebug({
+      lastError: {
+        stage: 'credentials_get',
+        name: err && err.name ? err.name : null,
+        message,
+        stack: err && err.stack ? err.stack : null,
+      },
+    }, 'error');
+    setWalletResponseState('error', `Digital credential launch failed: ${message}`);
+    log('err', `Digital credential launch failed: ${message}`);
+    throw err;
+  }
+}
+
+async function launchStoredAnnexCRequest() {
+  if (!state.sessionId || !state.annexCRequestPayload) {
+    setWalletResponseState('error', 'No Annex C request is ready yet. Generate a request first.');
+    log('err', 'No stored Annex C request is available to launch');
+    return;
+  }
+  await triggerAnnexCPresentation(state.annexCRequestPayload);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -935,9 +1241,10 @@ async function generateRequest() {
 
   try {
     const verifierId = document.getElementById('verifier-id').value.trim();
+    const protocol = state.activeProtocol;
     const docTypeSel = document.getElementById('doc-type').value;
     const docType = docTypeSel === 'custom' ? document.getElementById('custom-doc-type').value.trim() : docTypeSel;
-    const includeMdl = document.getElementById('include-mdl').checked;
+    const includeMdl = protocol === 'annex_c' ? false : document.getElementById('include-mdl').checked;
 
     const selectedPhotoid = Object.keys(getCheckedElements('photoid-elements'));
     const selectedMdl = includeMdl ? Object.keys(getCheckedElements('mdl-elements')) : [];
@@ -964,66 +1271,153 @@ async function generateRequest() {
       log('info', `Custom namespace ${customNamespace}: ${customNamespaceAttributes.join(', ')}`);
     }
 
-    const res = await fetch('/mdoc/session', {
+    const res = await fetch(protocol === 'annex_c' ? '/dc/session' : '/mdoc/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        verifier_id: verifierId,
-        doc_type: docType,
-        include_mdl: includeMdl,
-        photoid_elements: selectedPhotoid,
-        mdl_elements: selectedMdl,
-        custom_photoid_attributes: customPhotoidAttributes,
-        custom_mdl_attributes: customMdlAttributes,
-        custom_namespace: customNamespace,
-        custom_namespace_attributes: customNamespaceAttributes,
-      }),
+      body: JSON.stringify(protocol === 'annex_c'
+        ? {
+            verifier_id: verifierId,
+            photoid_elements: selectedPhotoid,
+            custom_photoid_attributes: customPhotoidAttributes,
+            custom_namespace: customNamespace,
+            custom_namespace_attributes: customNamespaceAttributes,
+          }
+        : {
+            verifier_id: verifierId,
+            doc_type: docType,
+            include_mdl: includeMdl,
+            photoid_elements: selectedPhotoid,
+            mdl_elements: selectedMdl,
+            custom_photoid_attributes: customPhotoidAttributes,
+            custom_mdl_attributes: customMdlAttributes,
+            custom_namespace: customNamespace,
+            custom_namespace_attributes: customNamespaceAttributes,
+          }),
     });
     if (!res.ok) {
       throw new Error(`Session creation failed: ${res.status}`);
     }
     const payload = await res.json();
-    const requestUrl = payload.request_url;
-    const mdocUri = payload.mdoc_uri;
-    const reEngBytes = Uint8Array.from((payload.reader_engagement_hex.match(/.{2}/g) || []).map(h => parseInt(h, 16)));
-
-    state.readerEngagementBytes = reEngBytes;
-    state.mdocUri = mdocUri;
     state.sessionNonce = null;
     state.sessionId = payload.session_id;
-    document.getElementById('request-url').value = requestUrl;
-    document.getElementById('endpoint-bar-url').value = requestUrl;
-    log('ok', `Session created: ${payload.session_id}`);
-    log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
-    log('ok', `mdoc:// URI: ${mdocUri.length} chars`);
+    if (protocol === 'annex_c') {
+      const requestJson = JSON.stringify(payload.request, null, 2);
+      const mdocRequest = (payload.request.requests || []).find(item =>
+        item && item.protocol === 'org-iso-mdoc' && item.data
+      ) || (payload.request.requests || [])[0];
+      if (!mdocRequest || !mdocRequest.data || !mdocRequest.data.deviceRequest) {
+        throw new Error('Annex C request did not contain an mdoc request payload');
+      }
+      const deviceRequestBytes = base64UrlToBytes(mdocRequest.data.deviceRequest);
+      state.readerEngagementBytes = deviceRequestBytes;
+      state.annexCDeviceRequestB64 = mdocRequest.data.deviceRequest;
+      state.annexCRequestPayload = payload.request;
+      state.transportValue = requestJson;
+      state.mdocUri = null;
+      updateAnnexCDebug({
+        selection: {
+          verifierId,
+          docType: payload.doc_type,
+          requestedNamespaces,
+          photoidElements: selectedPhotoid,
+          customPhotoidAttributes,
+          customNamespace,
+          customNamespaceAttributes,
+        },
+        session: {
+          sessionId: payload.session_id,
+          responseUrl: payload.response_url,
+          statusUrl: payload.status_url,
+          expiresAt: payload.expires_at,
+          requestNonceHex: payload.request_nonce_hex,
+          recipientPublicKeyHex: payload.recipient_public_key_hex,
+          deviceRequestBytes: deviceRequestBytes.length,
+        },
+        requestPayload: payload.request,
+        lastError: null,
+        lastResult: {
+          stage: 'session_created',
+        },
+      }, 'request_ready');
+      document.getElementById('request-url').value = payload.response_url;
+      document.getElementById('endpoint-bar-url').value = payload.status_url;
+      log('ok', `Annex C session created: ${payload.session_id}`);
+      log('ok', `DeviceRequest payload: ${deviceRequestBytes.length} bytes`);
+      document.getElementById('qr-box').innerHTML = '<div class="placeholder">Annex C web presentment<br>does not use a QR code</div>';
+      document.getElementById('uri-display').textContent = requestJson;
+      document.getElementById('mdoc-uri-panel').style.display = 'block';
+      document.getElementById('download-qr-btn').style.display = 'none';
+      document.getElementById('copy-uri-btn').style.display = 'inline-flex';
+      document.getElementById('launch-dcapi-btn').style.display = 'inline-flex';
+      renderRequestSummary({
+        docType: payload.doc_type,
+        requestUrl: payload.response_url,
+        verifierId,
+        requestedNamespaces,
+        reEngSize: 0,
+        itemsReqSize: deviceRequestBytes.length,
+        readerAuthSize: 0,
+        mode: 'annex_c',
+        expiresAt: payload.expires_at,
+        notes: payload.notes || [],
+      });
+      updateSessionTable({
+        protocol: 'Digital Credentials API / Annex C',
+        docType: payload.doc_type,
+        'response url': payload.response_url,
+        'status url': payload.status_url,
+        verifierId,
+        'recipient pub key (x962)': payload.recipient_public_key_hex.slice(0, 32) + '…',
+        'session id': payload.session_id,
+        'request nonce': payload.request_nonce_hex,
+      });
+      startSessionPolling(payload.session_id, 'annex_c');
+      setWalletResponseState('waiting', 'Annex C request is ready. Attempting to launch the browser Digital Credentials flow now.');
+      log('info', 'Annex C request ready; attempting immediate presentment launch');
+      try {
+        await triggerAnnexCPresentation(payload.request);
+      } catch (_err) {
+        log('warn', 'Immediate Annex C launch failed; manual retry remains available');
+      }
+    } else {
+      const requestUrl = payload.request_url;
+      const mdocUri = payload.mdoc_uri;
+      const reEngBytes = Uint8Array.from((payload.reader_engagement_hex.match(/.{2}/g) || []).map(h => parseInt(h, 16)));
 
-    // 6. Render QR
-    renderQR(mdocUri);
+      state.readerEngagementBytes = reEngBytes;
+      state.mdocUri = mdocUri;
+      state.transportValue = mdocUri;
+      document.getElementById('request-url').value = requestUrl;
+      document.getElementById('endpoint-bar-url').value = requestUrl;
+      log('ok', `Session created: ${payload.session_id}`);
+      log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
+      log('ok', `mdoc:// URI: ${mdocUri.length} chars`);
 
-    // 7. Update URI panel
-    document.getElementById('uri-display').textContent = mdocUri;
-    document.getElementById('mdoc-uri-panel').style.display = 'block';
-    document.getElementById('open-deeplink').href = mdocUri;
-    document.getElementById('download-qr-btn').style.display = 'inline-flex';
-    document.getElementById('copy-uri-btn').style.display = 'inline-flex';
+      renderQR(mdocUri);
+      document.getElementById('uri-display').textContent = mdocUri;
+      document.getElementById('mdoc-uri-panel').style.display = 'block';
+      document.getElementById('open-deeplink').href = mdocUri;
+      document.getElementById('download-qr-btn').style.display = 'inline-flex';
+      document.getElementById('copy-uri-btn').style.display = 'inline-flex';
 
-    // 8. Request summary
-    renderRequestSummary({
-      docType, requestUrl, verifierId,
-      requestedNamespaces,
-      reEngSize: reEngBytes.length,
-      itemsReqSize: 0,
-      readerAuthSize: 0,
-    });
+      renderRequestSummary({
+        docType, requestUrl, verifierId,
+        requestedNamespaces,
+        reEngSize: reEngBytes.length,
+        itemsReqSize: 0,
+        readerAuthSize: 0,
+        mode: 'mdoc',
+      });
 
-    updateSessionTable({
-      docType, requestUrl, verifierId,
-      'reader pub key (x962)': payload.reader_public_key_hex.slice(0, 32) + '…',
-      'session id': payload.session_id,
-      'readerEngagement size': reEngBytes.length + ' bytes',
-      'backend flow': 'server-owned session',
-    });
-    startSessionPolling(payload.session_id);
+      updateSessionTable({
+        docType, requestUrl, verifierId,
+        'reader pub key (x962)': payload.reader_public_key_hex.slice(0, 32) + '…',
+        'session id': payload.session_id,
+        'readerEngagement size': reEngBytes.length + ' bytes',
+        'backend flow': 'server-owned session',
+      });
+      startSessionPolling(payload.session_id, 'mdoc');
+    }
 
     setStatus('request ready', '#3fb950');
     log('ok', 'DeviceRequest generation complete ✓');
@@ -1034,7 +1428,7 @@ async function generateRequest() {
     console.error(err);
   }
 
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg> Generate DeviceRequest`;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 12.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg>${state.activeProtocol === 'annex_c' ? ' Generate Annex C Request' : ' Generate DeviceRequest'}`;
   btn.disabled = false;
 }
 
@@ -1071,20 +1465,23 @@ function openDeeplink(e) {
 // ════════════════════════════════════════════════════════════
 // Request summary renderer
 // ════════════════════════════════════════════════════════════
-function renderRequestSummary({ docType, requestUrl, verifierId, requestedNamespaces, reEngSize, itemsReqSize, readerAuthSize }) {
+function renderRequestSummary({ docType, requestUrl, verifierId, requestedNamespaces, reEngSize, itemsReqSize, readerAuthSize, mode = 'mdoc', expiresAt = null, notes = [] }) {
   const el = document.getElementById('request-summary');
   el.innerHTML = `
     <table class="field-table">
+      <tr><td>mode</td><td colspan="2">${mode === 'annex_c' ? 'Digital Credentials API / Annex C' : 'URI scheme / QR'}</td></tr>
       <tr><td>docType</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px;color:var(--accent)">${docType}</code></td></tr>
-      <tr><td>request_url</td><td colspan="2" style="word-break:break-all">${requestUrl}</td></tr>
+      <tr><td>${mode === 'annex_c' ? 'response_url' : 'request_url'}</td><td colspan="2" style="word-break:break-all">${requestUrl}</td></tr>
       <tr><td>verifier ID</td><td colspan="2">${escHtml(verifierId)}</td></tr>
       ${requestedNamespaces.map(({ name, elements }) => `
         <tr><td>namespace</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${escHtml(name)}</code></td></tr>
         <tr><td>elements requested</td><td colspan="2">${elements.map(e => `<span class="badge info" style="margin:1px">${escHtml(e)}</span>`).join('')}</td></tr>
       `).join('')}
       <tr><td>ReaderEngagement</td><td colspan="2">${reEngSize} bytes</td></tr>
-      <tr><td>ItemsRequest</td><td colspan="2">${itemsReqSize} bytes</td></tr>
+      <tr><td>${mode === 'annex_c' ? 'DeviceRequest' : 'ItemsRequest'}</td><td colspan="2">${itemsReqSize} bytes</td></tr>
       <tr><td>COSE_Sign1</td><td colspan="2">${readerAuthSize} bytes</td></tr>
+      ${expiresAt ? `<tr><td>expires</td><td colspan="2">${escHtml(new Date(expiresAt * 1000).toLocaleString())}</td></tr>` : ''}
+      ${notes.map(note => `<tr><td>note</td><td colspan="2">${escHtml(note)}</td></tr>`).join('')}
     </table>`;
 }
 
@@ -1229,6 +1626,14 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (_err) {
+    return String(value);
+  }
+}
+
 function hexToBase64(hex) {
   const pairs = hex.match(/.{1,2}/g) || [];
   let binary = '';
@@ -1236,6 +1641,13 @@ function hexToBase64(hex) {
     binary += String.fromCharCode(parseInt(pair, 16));
   });
   return btoa(binary);
+}
+
+function base64UrlToBytes(raw) {
+  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+  const bin = atob(padded);
+  return Uint8Array.from(bin.split('').map(c => c.charCodeAt(0)));
 }
 
 function detectImageMimeFromHex(hex) {
@@ -1285,6 +1697,38 @@ function renderSharedAttributes(sharedAttributes) {
   `;
 }
 
+function buildWalletResponseExtra(mode, data) {
+  const sharedAttributesHtml = renderSharedAttributes(data.shared_attributes);
+  const transportStatus = data.validation && typeof data.validation.transport === 'string'
+    ? data.validation.transport
+    : '';
+  const preview = data.response_hex
+    ? `<div class="uri-display" style="font-size:11px">response hex: ${escHtml(data.response_hex.slice(0, 160))}${data.response_hex.length > 160 ? '…' : ''}</div>`
+    : '';
+  const validation = data.validation
+    ? `<div class="gap-sm"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Validation</div><table class="field-table">${Object.entries(data.validation).map(([name, value]) => `<tr><td>${escHtml(name)}</td><td>${escHtml(String(value))}</td></tr>`).join('')}</table></div>`
+    : '';
+
+  if (mode !== 'annex_c') {
+    return {
+      extra: sharedAttributesHtml,
+      transportStatus,
+    };
+  }
+
+  if (sharedAttributesHtml) {
+    return {
+      extra: `${sharedAttributesHtml}${validation}${transportStatus === 'decrypted' ? '' : preview}`,
+      transportStatus,
+    };
+  }
+
+  return {
+    extra: `${validation}${preview}`,
+    transportStatus,
+  };
+}
+
 function setWalletResponseState(kind, message, extraHtml='') {
   const badge = document.getElementById('wallet-response-badge');
   const panel = document.getElementById('wallet-response-panel');
@@ -1314,41 +1758,64 @@ function stopSessionPolling() {
   }
 }
 
-async function pollSessionStatus() {
+async function pollSessionStatus(mode = 'mdoc') {
   if (!state.sessionId) return;
   try {
-    const res = await fetch(`/mdoc/session/${state.sessionId}`);
+    const res = await fetch(mode === 'annex_c' ? `/dc/session/${state.sessionId}` : `/mdoc/session/${state.sessionId}`);
     if (!res.ok) throw new Error(`status ${res.status}`);
     const data = await res.json();
 
     if (data.response_received) {
-      const sharedAttributes = renderSharedAttributes(data.shared_attributes);
-      const preview = data.response_hex
-        ? `<div class="uri-display" style="font-size:11px">response hex: ${escHtml(data.response_hex.slice(0, 160))}${data.response_hex.length > 160 ? '…' : ''}</div>`
-        : '';
-      const extra = `${sharedAttributes}${preview}`;
-      setWalletResponseState('received', 'The wallet sent a follow-up encrypted response to the verifier.', extra);
-      log('ok', 'Wallet response received by backend');
-      if (data.stage >= 2) {
-        setWalletResponseState('done', 'Session completed. The verifier received the wallet response and sent the protocol termination acknowledgement.', extra);
+      if (mode === 'annex_c') {
+        updateAnnexCDebug({
+          session: {
+            ...(state.annexCDebug && state.annexCDebug.session ? state.annexCDebug.session : {}),
+            backendValidation: data.validation || null,
+            backendLastError: data.last_error || null,
+          },
+          lastResult: {
+            stage: 'backend_status_response_received',
+            responseReceived: data.response_received,
+            responsePreview: data.response_preview || null,
+            sharedAttributes: data.shared_attributes || {},
+          },
+        }, data.validation && data.validation.transport === 'decrypted' ? 'decrypted' : 'backend_received');
+      }
+      const { extra, transportStatus } = buildWalletResponseExtra(mode, data);
+      setWalletResponseState('received', mode === 'annex_c'
+        ? (transportStatus === 'decrypted'
+          ? 'The verifier received and decrypted a Digital Credentials API response. Shared attributes are shown below.'
+          : 'The verifier received a Digital Credentials API response and stored the encrypted payload for inspection.')
+        : 'The wallet sent a follow-up encrypted response to the verifier.', extra);
+      log('ok', mode === 'annex_c' ? 'Annex C response received by backend' : 'Wallet response received by backend');
+      if (mode === 'annex_c' || data.stage >= 2) {
+        setWalletResponseState('done', mode === 'annex_c'
+          ? (transportStatus === 'decrypted'
+            ? 'Session completed. The verifier decrypted the Annex C response and extracted the shared PhotoID fields.'
+            : 'Session completed. The verifier received the Annex C response, but this demo backend could not decrypt the standards-formatted encrypted payload yet.')
+          : 'Session completed. The verifier received the wallet response and sent the protocol termination acknowledgement.', extra);
         stopSessionPolling();
       }
-    } else if (data.stage === 1) {
+    } else if (mode !== 'annex_c' && data.stage === 1) {
       setWalletResponseState('connected', 'The wallet accepted the QR and the verifier sent the encrypted DeviceRequest. Waiting for a follow-up response.');
     } else {
-      setWalletResponseState('waiting', 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
+      setWalletResponseState('waiting', mode === 'annex_c'
+        ? 'Waiting for a Digital Credentials API response to be posted to the verifier.'
+        : 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
     }
   } catch (e) {
     setWalletResponseState('error', `Could not fetch session status: ${e.message}`);
   }
 }
 
-function startSessionPolling(sessionId) {
+function startSessionPolling(sessionId, mode = 'mdoc') {
   stopSessionPolling();
   state.sessionId = sessionId;
-  setWalletResponseState('waiting', 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
-  pollSessionStatus();
-  state.sessionStatusTimer = setInterval(pollSessionStatus, 2000);
+  setWalletResponseState('waiting', mode === 'annex_c'
+    ? 'Waiting for a Digital Credentials API response to be posted to the verifier.'
+    : 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
+  pollSessionStatus(mode);
+  state.sessionStatusTimer = setInterval(() => pollSessionStatus(mode), 2000);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1387,10 +1854,12 @@ async function testEndpoint() {
 // ════════════════════════════════════════════════════════════
 // URI copy
 // ════════════════════════════════════════════════════════════
-async function copyUri() {
-  if (!state.mdocUri) return;
-  await navigator.clipboard.writeText(state.mdocUri);
-  log('ok', 'mdoc:// URI copied to clipboard');
+async function copyCurrentTransportValue() {
+  if (!state.transportValue) return;
+  await navigator.clipboard.writeText(state.transportValue);
+  log('ok', state.activeProtocol === 'annex_c'
+    ? 'Annex C request JSON copied to clipboard'
+    : 'mdoc:// URI copied to clipboard');
 }
 
 // ════════════════════════════════════════════════════════════
