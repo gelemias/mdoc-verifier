@@ -1697,8 +1697,112 @@ function renderSharedAttributes(sharedAttributes) {
   `;
 }
 
+function decodeSharedAttributesFromResponseHex(responseHex) {
+  if (!responseHex || typeof responseHex !== 'string') return {};
+  try {
+    const bytes = fromHex(responseHex);
+    const decoded = CBOR.decode(bytes);
+    const deviceResponse = findDeviceResponseNode(decoded);
+    const documents = getField(deviceResponse, 'documents');
+    const documentList = Array.isArray(documents) ? documents : [];
+    const out = {};
+
+    documentList.forEach(document => {
+      const issuerSigned = getField(document, 'issuerSigned');
+      const nameSpaces = getField(issuerSigned, 'nameSpaces');
+      if (!nameSpaces || typeof nameSpaces !== 'object') return;
+
+      const entries = nameSpaces instanceof Map ? Array.from(nameSpaces.entries()) : Object.entries(nameSpaces);
+      entries.forEach(([namespace, items]) => {
+        if (!Array.isArray(items)) return;
+        if (!out[namespace]) out[namespace] = {};
+        items.forEach(item => {
+          const decodedItem = decodeIssuerSignedItem(item);
+          const identifier = getField(decodedItem, 'elementIdentifier');
+          const elementValue = getField(decodedItem, 'elementValue');
+          if (typeof identifier === 'string') {
+            out[namespace][identifier] = cborToJson(elementValue);
+          }
+        });
+      });
+    });
+
+    return out;
+  } catch (_err) {
+    return {};
+  }
+}
+
+function decodeIssuerSignedItem(item) {
+  let decoded = item;
+  if (decoded && typeof decoded === 'object' && decoded._tag === 24 && decoded._val instanceof Uint8Array) {
+    decoded = CBOR.decode(decoded._val);
+  } else if (decoded instanceof Uint8Array) {
+    decoded = CBOR.decode(decoded);
+  }
+  return decoded && typeof decoded === 'object' ? decoded : null;
+}
+
+function findDeviceResponseNode(value, depth = 8) {
+  if (depth < 0 || value === null || value === undefined) return null;
+
+  let decoded = value;
+  try {
+    if (decoded && typeof decoded === 'object' && decoded._tag === 24 && decoded._val instanceof Uint8Array) {
+      decoded = CBOR.decode(decoded._val);
+    } else if (decoded instanceof Uint8Array) {
+      decoded = CBOR.decode(decoded);
+    }
+  } catch (_err) {}
+
+  if (decoded && typeof decoded === 'object') {
+    const documents = getField(decoded, 'documents');
+    if (Array.isArray(documents)) return decoded;
+
+    const wrappedKeys = ['deviceResponseBytes', 'deviceResponse', 'response', 'payload', 'data'];
+    for (const key of wrappedKeys) {
+      if (Object.prototype.hasOwnProperty.call(decoded, key)) {
+        const found = findDeviceResponseNode(decoded[key], depth - 1);
+        if (found) return found;
+      }
+    }
+
+    if (decoded instanceof Map) {
+      for (const nested of decoded.values()) {
+        const found = findDeviceResponseNode(nested, depth - 1);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    for (const nested of Object.values(decoded)) {
+      const found = findDeviceResponseNode(nested, depth - 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (Array.isArray(decoded)) {
+    for (const nested of decoded) {
+      const found = findDeviceResponseNode(nested, depth - 1);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function getField(container, key) {
+  if (!container || typeof container !== 'object') return undefined;
+  if (container instanceof Map) return container.get(key);
+  return container[key];
+}
+
 function buildWalletResponseExtra(mode, data) {
-  const sharedAttributesHtml = renderSharedAttributes(data.shared_attributes);
+  const sharedAttributes = (data.shared_attributes && Object.keys(data.shared_attributes).length)
+    ? data.shared_attributes
+    : decodeSharedAttributesFromResponseHex(data.response_hex);
+  const sharedAttributesHtml = renderSharedAttributes(sharedAttributes);
   const transportStatus = data.validation && typeof data.validation.transport === 'string'
     ? data.validation.transport
     : '';

@@ -172,6 +172,52 @@ def _decode_issuer_signed_item(item: Any) -> tuple[str | None, Any | None]:
     return item.get("elementIdentifier"), item.get("elementValue")
 
 
+def _decode_cbor_value(value: Any) -> Any:
+    if isinstance(value, cbor2.CBORTag) and value.tag == CBOR_TAG_ENCODED and isinstance(value.value, bytes):
+        return cbor2.loads(value.value)
+    if isinstance(value, (bytes, bytearray)):
+        return cbor2.loads(bytes(value))
+    return value
+
+
+def _find_device_response_node(value: Any, max_depth: int = 8) -> dict[str, Any] | None:
+    if max_depth < 0:
+        return None
+
+    decoded = value
+    try:
+        decoded = _decode_cbor_value(value)
+    except Exception:
+        pass
+
+    if isinstance(decoded, dict):
+        documents = decoded.get("documents")
+        if isinstance(documents, list):
+            return decoded
+
+        # Some wallet implementations wrap the actual DeviceResponse.
+        for key in ("deviceResponseBytes", "deviceResponse", "response", "payload", "data"):
+            if key in decoded:
+                found = _find_device_response_node(decoded[key], max_depth - 1)
+                if found is not None:
+                    return found
+
+        for nested in decoded.values():
+            found = _find_device_response_node(nested, max_depth - 1)
+            if found is not None:
+                return found
+        return None
+
+    if isinstance(decoded, (list, tuple)):
+        for nested in decoded:
+            found = _find_device_response_node(nested, max_depth - 1)
+            if found is not None:
+                return found
+        return None
+
+    return None
+
+
 def _json_safe_value(value: Any) -> Any:
     if isinstance(value, bytes):
         return {"type": "bytes", "hex": value.hex()}
@@ -194,13 +240,9 @@ def extract_shared_attributes(response_plaintext: bytes | None) -> dict[str, dic
     if not response_plaintext:
         return {}
 
-    try:
-        decoded = cbor2.loads(response_plaintext)
-    except Exception:
+    decoded = _find_device_response_node(response_plaintext)
+    if decoded is None:
         return {}
-    if not isinstance(decoded, dict):
-        return {}
-
     documents = decoded.get("documents")
     if not isinstance(documents, list):
         return {}
