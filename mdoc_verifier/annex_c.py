@@ -98,7 +98,9 @@ def build_device_request_bytes(
         }
     )
     payload = {
-        "version": "1.1",
+        # DeviceRequest uses the ISO 18013-5 version identifier. Safari's
+        # Annex C validator rejects the request when this is "1.1".
+        "version": "1.0",
         "docRequests": [
             {
                 "itemsRequest": _tagged_bytes(encoded_items_request),

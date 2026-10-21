@@ -28,6 +28,10 @@ def main() -> None:
     create.raise_for_status()
     payload = create.json()
     request_entry = payload["request"]["requests"][0]["data"]
+    device_request = cbor2.loads(
+        __import__("base64").urlsafe_b64decode(request_entry["deviceRequest"] + "==")
+    )
+    assert device_request["version"] == "1.0"
 
     encryption_info = cbor2.loads(
         __import__("base64").urlsafe_b64decode(request_entry["encryptionInfo"] + "==")

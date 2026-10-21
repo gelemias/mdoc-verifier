@@ -886,6 +886,12 @@ function canUseDigitalCredentialsApi() {
     && typeof navigator.credentials?.get === 'function';
 }
 
+function isSafariBrowser() {
+  const ua = navigator.userAgent || '';
+  return /Safari\//.test(ua)
+    && !/(Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPiOS|Android)/.test(ua);
+}
+
 function allowsMdocProtocol() {
   if (typeof window.DigitalCredential === 'undefined') return false;
   if (typeof window.DigitalCredential.userAgentAllowsProtocol !== 'function') return true;
@@ -1349,6 +1355,7 @@ async function generateRequest() {
       document.getElementById('download-qr-btn').style.display = 'none';
       document.getElementById('copy-uri-btn').style.display = 'inline-flex';
       document.getElementById('launch-dcapi-btn').style.display = 'inline-flex';
+      document.getElementById('launch-dcapi-btn').textContent = 'Launch Digital Credential';
       renderRequestSummary({
         docType: payload.doc_type,
         requestUrl: payload.response_url,
@@ -1372,12 +1379,21 @@ async function generateRequest() {
         'request nonce': payload.request_nonce_hex,
       });
       startSessionPolling(payload.session_id, 'annex_c');
-      setWalletResponseState('waiting', 'Annex C request is ready. Attempting to launch the browser Digital Credentials flow now.');
-      log('info', 'Annex C request ready; attempting immediate presentment launch');
-      try {
-        await triggerAnnexCPresentation(payload.request);
-      } catch (_err) {
-        log('warn', 'Immediate Annex C launch failed; manual retry remains available');
+      if (isSafariBrowser()) {
+        setWalletResponseState(
+          'waiting',
+          'Annex C request is ready. Click the button below to open the browser presentment flow.',
+          '<button class="btn primary" type="button" onclick="launchStoredAnnexCRequest()">Launch Digital Credential</button>'
+        );
+        log('info', 'Safari detected; waiting for explicit user gesture before presentment launch');
+      } else {
+        setWalletResponseState('waiting', 'Annex C request is ready. Launching the browser Digital Credentials flow.');
+        log('info', 'Annex C request ready; attempting immediate presentment launch');
+        try {
+          await triggerAnnexCPresentation(payload.request);
+        } catch (_err) {
+          log('warn', 'Immediate Annex C launch failed; manual retry remains available');
+        }
       }
     } else {
       const requestUrl = payload.request_url;
