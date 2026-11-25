@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
 import cbor2
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -7,11 +11,22 @@ from fastapi.testclient import TestClient
 
 from mdoc_verifier.iso_session import build_reader_engagement, build_session_transcript, derive_session_keys, make_iv, tagged_bytes
 from server.main import app
+from smoke_annex_c import ORIGIN, demo_issuer, device_response
 
 
 def main() -> None:
-    client = TestClient(app)
+    with TemporaryDirectory() as temp:
+        issuer = demo_issuer(temp)
+        for ca, expected_auth in ((issuer[2], "verified"), ("", "unverified")):
+            with patch.dict(os.environ, {
+                "MDOC_PUBLIC_ORIGIN": ORIGIN, "MDOC_ISSUER_CA_PEM": ca,
+                "MDOC_ISSUER_CRL_PEM": "", "MDOC_ALLOW_UNTRUSTED_ISSUER": "true",
+            }):
+                with TestClient(app, base_url=ORIGIN) as client:
+                    exercise_qr(client, issuer, expected_auth)
 
+
+def exercise_qr(client, issuer, expected_auth: str):
     create = client.post(
         "/mdoc/session",
         json={
@@ -27,8 +42,9 @@ def main() -> None:
     )
     create.raise_for_status()
     session = create.json()
+    assert session["issuer_inspection_mode"] == (expected_auth == "unverified")
 
-    transfer_path = session["request_url"].replace("http://testserver", "")
+    transfer_path = session["request_url"].removeprefix(ORIGIN)
     reader_public = ec.EllipticCurvePublicKey.from_encoded_point(
         ec.SECP256R1(), bytes.fromhex(session["reader_public_key_hex"])
     )
@@ -63,8 +79,9 @@ def main() -> None:
     print("Custom attribute requested:", "employee_id" in requested_elements)
     print("Custom namespace requested:", "department" in custom_namespace_elements)
 
+    plaintext = device_response(issuer, cbor2.loads(transcript), device_private)
     followup = cbor2.dumps(
-        {"data": AESGCM(sk_device).encrypt(make_iv("reader_decrypt", 1), b"dummy-device-response", None)}
+        {"data": AESGCM(sk_device).encrypt(make_iv("reader_decrypt", 1), plaintext, None)}
     )
     second = client.post(
         transfer_path,
@@ -72,7 +89,15 @@ def main() -> None:
         headers={"content-type": "application/cbor"},
     )
     second.raise_for_status()
-    print("Termination response:", cbor2.loads(second.content))
+    assert cbor2.loads(second.content) == {"status": 20}
+    status_path = "/mdoc/session/" + session["session_id"]
+    assert client.get(status_path).status_code == 404
+    status = client.get(status_path, headers={"Authorization": "Bearer " + session["access_token"]})
+    status.raise_for_status()
+    assert status.json()["validation"]["issuer_auth"] == expected_auth
+    assert status.json()["shared_attributes"] == {"org.iso.23220.1": {"family_name": "Doe"}}
+    assert not any(key.startswith("debug_") for key in status.json())
+    print(f"QR transfer and termination passed with issuer status {expected_auth}")
 
 
 if __name__ == "__main__":

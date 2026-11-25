@@ -15,6 +15,10 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from mdoc_verifier.validation import (
+    IssuerTrust, decode_cbor, device_public_key, response_validation, tagged_bytes, verify_response,
+)
+
 
 PHOTO_ID_NAMESPACE = "org.iso.23220.1"
 MDL_NAMESPACE = "org.iso.18013.5.1"
@@ -38,10 +42,6 @@ def build_mdoc_uri(reader_engagement: bytes) -> str:
     return f"mdoc://{_b64url(reader_engagement)}"
 
 
-def tagged_bytes(data: bytes) -> cbor2.CBORTag:
-    return cbor2.CBORTag(CBOR_TAG_ENCODED, data)
-
-
 def build_cose_key(public_key: ec.EllipticCurvePublicKey) -> dict[int, Any]:
     numbers = public_key.public_numbers()
     size = 32
@@ -51,12 +51,6 @@ def build_cose_key(public_key: ec.EllipticCurvePublicKey) -> dict[int, Any]:
         COSE_X: numbers.x.to_bytes(size, "big"),
         COSE_Y: numbers.y.to_bytes(size, "big"),
     }
-
-
-def cose_key_to_public_key(cose_key: dict[int, Any]) -> ec.EllipticCurvePublicKey:
-    x = int.from_bytes(cose_key[COSE_X], "big")
-    y = int.from_bytes(cose_key[COSE_Y], "big")
-    return ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key()
 
 
 def build_reader_engagement(
@@ -72,7 +66,7 @@ def build_reader_engagement(
 
 
 def parse_device_engagement_message(message_data: bytes) -> bytes:
-    decoded = cbor2.loads(message_data)
+    decoded = decode_cbor(message_data)
     tagged = decoded["deviceEngagementBytes"]
     if not isinstance(tagged, cbor2.CBORTag) or tagged.tag != CBOR_TAG_ENCODED:
         raise ValueError("deviceEngagementBytes must be tag 24")
@@ -82,15 +76,17 @@ def parse_device_engagement_message(message_data: bytes) -> bytes:
 
 
 def parse_device_public_key(device_engagement: bytes) -> ec.EllipticCurvePublicKey:
-    decoded = cbor2.loads(device_engagement)
+    decoded = decode_cbor(device_engagement)
     security = decoded[1]
     if security[0] != 1:
         raise ValueError("Unsupported cipher suite")
     tagged = security[1]
     if not isinstance(tagged, cbor2.CBORTag) or tagged.tag != CBOR_TAG_ENCODED:
         raise ValueError("Device key must be tag 24 COSE_Key")
-    cose_key = cbor2.loads(tagged.value)
-    return cose_key_to_public_key(cose_key)
+    key = device_public_key(decode_cbor(tagged.value))
+    if not isinstance(key, ec.EllipticCurvePublicKey) or not isinstance(key.curve, ec.SECP256R1):
+        raise ValueError("Session encryption requires a P-256 device key")
+    return key
 
 
 def build_session_transcript(
@@ -153,121 +149,14 @@ def encrypt_session_data(
 
 
 def decrypt_session_data(message_data: bytes, key: bytes, counter: int) -> tuple[bytes | None, int | None]:
-    message = cbor2.loads(message_data)
+    message = decode_cbor(message_data)
+    if not isinstance(message, dict):
+        raise ValueError("SessionData must be a CBOR map")
     plaintext = None
     if "data" in message:
         plaintext = AESGCM(key).decrypt(make_iv("reader_decrypt", counter), message["data"], None)
     status = message.get("status")
     return plaintext, status
-
-
-def _decode_issuer_signed_item(item: Any) -> tuple[str | None, Any | None]:
-    if isinstance(item, cbor2.CBORTag) and item.tag == CBOR_TAG_ENCODED and isinstance(item.value, bytes):
-        item = cbor2.loads(item.value)
-    elif isinstance(item, bytes):
-        item = cbor2.loads(item)
-
-    if not isinstance(item, dict):
-        return None, None
-    return item.get("elementIdentifier"), item.get("elementValue")
-
-
-def _decode_cbor_value(value: Any) -> Any:
-    if isinstance(value, cbor2.CBORTag) and value.tag == CBOR_TAG_ENCODED and isinstance(value.value, bytes):
-        return cbor2.loads(value.value)
-    if isinstance(value, (bytes, bytearray)):
-        return cbor2.loads(bytes(value))
-    return value
-
-
-def _find_device_response_node(value: Any, max_depth: int = 8) -> dict[str, Any] | None:
-    if max_depth < 0:
-        return None
-
-    decoded = value
-    try:
-        decoded = _decode_cbor_value(value)
-    except Exception:
-        pass
-
-    if isinstance(decoded, dict):
-        documents = decoded.get("documents")
-        if isinstance(documents, list):
-            return decoded
-
-        # Some wallet implementations wrap the actual DeviceResponse.
-        for key in ("deviceResponseBytes", "deviceResponse", "response", "payload", "data"):
-            if key in decoded:
-                found = _find_device_response_node(decoded[key], max_depth - 1)
-                if found is not None:
-                    return found
-
-        for nested in decoded.values():
-            found = _find_device_response_node(nested, max_depth - 1)
-            if found is not None:
-                return found
-        return None
-
-    if isinstance(decoded, (list, tuple)):
-        for nested in decoded:
-            found = _find_device_response_node(nested, max_depth - 1)
-            if found is not None:
-                return found
-        return None
-
-    return None
-
-
-def _json_safe_value(value: Any) -> Any:
-    if isinstance(value, bytes):
-        return {"type": "bytes", "hex": value.hex()}
-    if isinstance(value, cbor2.CBORTag):
-        return {
-            "type": "cbor_tag",
-            "tag": value.tag,
-            "value": _json_safe_value(value.value),
-        }
-    if isinstance(value, dict):
-        return {str(key): _json_safe_value(val) for key, val in value.items()}
-    if isinstance(value, list):
-        return [_json_safe_value(item) for item in value]
-    if isinstance(value, tuple):
-        return [_json_safe_value(item) for item in value]
-    return value
-
-
-def extract_shared_attributes(response_plaintext: bytes | None) -> dict[str, dict[str, Any]]:
-    if not response_plaintext:
-        return {}
-
-    decoded = _find_device_response_node(response_plaintext)
-    if decoded is None:
-        return {}
-    documents = decoded.get("documents")
-    if not isinstance(documents, list):
-        return {}
-
-    shared: dict[str, dict[str, Any]] = {}
-    for document in documents:
-        if not isinstance(document, dict):
-            continue
-        issuer_signed = document.get("issuerSigned")
-        if not isinstance(issuer_signed, dict):
-            continue
-        name_spaces = issuer_signed.get("nameSpaces")
-        if not isinstance(name_spaces, dict):
-            continue
-
-        for namespace, items in name_spaces.items():
-            if not isinstance(namespace, str) or not isinstance(items, list):
-                continue
-            namespace_items = shared.setdefault(namespace, {})
-            for item in items:
-                key, value = _decode_issuer_signed_item(item)
-                if key is not None:
-                    namespace_items[key] = _json_safe_value(value)
-
-    return shared
 
 
 def build_device_request(
@@ -344,36 +233,26 @@ class SessionConfig:
 class SessionState:
     session_id: str
     request_url: str
-    reader_private_key: ec.EllipticCurvePrivateKey
+    reader_private_key: ec.EllipticCurvePrivateKey | None
     reader_public_key: ec.EllipticCurvePublicKey
     e_reader_key_bytes: bytes
     reader_engagement: bytes
     config: SessionConfig
-    created_at: float = field(default_factory=time.time)
+    access_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+    expires_at: float = field(default_factory=lambda: time.time() + 300)
     stage: int = 0
-    device_public_key: ec.EllipticCurvePublicKey | None = None
     session_transcript: bytes | None = None
-    transcript_salt: bytes | None = None
-    shared_secret: bytes | None = None
     sk_device: bytes | None = None
-    sk_reader: bytes | None = None
-    response_plaintext: bytes | None = None
     shared_attributes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    last_error: str | None = None
+    issuer_auth: str = "pending"
 
-    def create_initial_response(self, message_data: bytes) -> bytes:
-        device_engagement = parse_device_engagement_message(message_data)
-        self.device_public_key = parse_device_public_key(device_engagement)
-        self.session_transcript = build_session_transcript(
-            device_engagement,
-            self.e_reader_key_bytes,
-            self.reader_engagement,
-        )
-        self.shared_secret, self.transcript_salt, self.sk_device, self.sk_reader = derive_session_keys(
-            self.reader_private_key,
-            self.device_public_key,
-            self.session_transcript,
-        )
-        requested = default_requested_elements(
+    @property
+    def validation_status(self) -> dict[str, str]:
+        return response_validation(self.issuer_auth)
+
+    def requested_elements(self) -> dict[str, dict[str, bool]]:
+        return default_requested_elements(
             self.config.doc_type,
             self.config.photoid_elements,
             self.config.mdl_elements,
@@ -384,16 +263,42 @@ class SessionState:
             self.config.custom_namespace_attributes,
             self.config.include_mdl,
         )
-        device_request = build_device_request(self.config.doc_type, requested)
-        self.stage = 1
-        return encrypt_session_data(device_request, self.sk_reader, counter=1)
 
-    def handle_followup(self, message_data: bytes) -> bytes:
-        if self.sk_device is None:
+    def create_initial_response(self, message_data: bytes) -> bytes:
+        if self.reader_private_key is None:
+            raise ValueError("Session already completed")
+        device_engagement = parse_device_engagement_message(message_data)
+        device_public_key = parse_device_public_key(device_engagement)
+        transcript = build_session_transcript(
+            device_engagement, self.e_reader_key_bytes, self.reader_engagement,
+        )
+        _, _, sk_device, sk_reader = derive_session_keys(
+            self.reader_private_key, device_public_key, transcript,
+        )
+        request = build_device_request(self.config.doc_type, self.requested_elements())
+        response = encrypt_session_data(request, sk_reader, counter=1)
+        self.session_transcript = transcript
+        self.sk_device = sk_device
+        self.stage = 1
+        return response
+
+    def handle_followup(self, message_data: bytes, trust: IssuerTrust) -> bytes:
+        if self.sk_device is None or self.session_transcript is None:
             raise ValueError("Session keys are not established")
-        plaintext, _status = decrypt_session_data(message_data, self.sk_device, counter=1)
-        self.response_plaintext = plaintext
-        self.shared_attributes = extract_shared_attributes(plaintext)
+        plaintext, _ = decrypt_session_data(message_data, self.sk_device, counter=1)
+        try:
+            if plaintext is None:
+                raise ValueError("Wallet did not return a document")
+            self.shared_attributes = verify_response(
+                plaintext, decode_cbor(self.session_transcript), self.config.doc_type,
+                self.requested_elements(), trust, self.reader_private_key,
+            )
+            self.issuer_auth = "unverified" if trust.inspection_mode else "verified"
+        except ValueError as exc:
+            self.last_error = str(exc)
+        self.sk_device = None
+        self.session_transcript = None
+        self.reader_private_key = None
         self.stage = 2
         return cbor2.dumps({"status": 20})
 

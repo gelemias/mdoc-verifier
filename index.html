@@ -1,36 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-type="software">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ISO 18013-7 Verifier Tester</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<title>mdoc Verifier</title>
+<meta name="description" content="Request and inspect mobile identity documents using QR or the Digital Credentials API.">
+<meta name="page-type" content="software">
+<meta name="site-kind" content="software">
+<script src="/static/qrcode.min.js" defer></script>
 <style>
   :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --bg3: #21262d;
-    --bg4: #30363d;
-    --border: #30363d;
-    --border2: #484f58;
-    --text: #e6edf3;
-    --text2: #8b949e;
-    --text3: #6e7681;
-    --accent: #58a6ff;
-    --accent2: #1f6feb;
-    --green: #3fb950;
-    --green-bg: #0d1f0e;
-    --amber: #d29922;
-    --amber-bg: #1f1a0e;
-    --red: #f85149;
-    --red-bg: #1f0d0d;
-    --purple: #a371f7;
-    --purple-bg: #170f2a;
-    --teal: #39d353;
-    --mono: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
-    --sans: -apple-system, 'Segoe UI', sans-serif;
-    --radius: 6px;
-    --radius-lg: 10px;
+    color-scheme: dark;
+    --bg: #0a0f1d;
+    --bg2: #11192b;
+    --bg3: #161f34;
+    --bg4: #202d48;
+    --border: #273650;
+    --border2: #3b4c6e;
+    --text: #eef3ff;
+    --text2: #adbcd6;
+    --text3: #8d9cb7;
+    --accent: #a7c2ff;
+    --accent2: #445fe3;
+    --green: #79e3ac;
+    --green-bg: #102b26;
+    --amber: #ffcf7b;
+    --amber-bg: #302416;
+    --red: #ff9c9f;
+    --red-bg: #311f29;
+    --purple: #cab6ff;
+    --mono: ui-monospace, 'SF Mono', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 9px;
+    --radius-lg: 15px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
@@ -323,14 +325,126 @@
     display: flex; align-items: center; justify-content: space-between;
   }
 
-  @media (max-width: 900px) {
-    main { grid-template-columns: 1fr; }
-    aside { border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
-    main { height: auto; }
+  [hidden] { display: none !important; }
+  body { background: radial-gradient(ellipse at 68% 0%, #14213c 0, var(--bg) 38rem); }
+  header { background: #0c1322; padding: 14px clamp(16px, 3vw, 40px); }
+  header .logo { gap: 10px; }
+  header .logo svg { width: 27px; height: 27px; flex: none; }
+  header h1 { font-size: clamp(16px, 2vw, 21px); letter-spacing: -.035em; white-space: nowrap; }
+  header .status-dot { animation: none; box-shadow: none; flex: none; }
+  header .status-label { white-space: nowrap; }
+  main {
+    grid-template-columns: minmax(285px, 350px) minmax(0, 1fr);
+    align-items: start;
+    max-width: 1320px;
+    height: auto;
+    margin-inline: auto;
+    min-height: calc(100vh - 118px);
+  }
+  aside { gap: 16px; padding: 22px 20px; overflow: visible; min-width: 0; }
+  .content { min-width: 0; overflow: visible; }
+  .setup-title { font-size: 19px; letter-spacing: -.025em; margin-bottom: 14px; }
+  .section-label { font-size: 11px; letter-spacing: .065em; color: var(--text2); }
+  .claim-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .claim-heading .section-label { margin-bottom: 0; }
+  .claim-heading + .checkbox-grid { margin-top: 10px; }
+  .advanced-options {
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg2);
+  }
+  .advanced-options > summary {
+    padding: 10px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  }
+  .advanced-fields { border-top: 1px solid var(--border); padding: 12px; }
+  #annexc-debug-card > summary { min-height: 44px; font-family: var(--sans); }
+  #annexc-debug-card:not([open]) > summary { border-bottom: 0; }
+  #include-mdl-label { display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; min-height: 32px; }
+  #include-mdl { accent-color: var(--accent); }
+  .checkbox-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .checkbox-item { min-height: 38px; margin: 0; padding: 6px 8px; }
+  .checkbox-item.checked { background: #1a294a; border-color: #4966a8; }
+  .checkbox-item input { flex: none; }
+  .checkbox-item span { overflow-wrap: anywhere; }
+  .btn { justify-content: center; min-height: 38px; }
+  .btn.primary { min-height: 44px; box-shadow: 0 5px 16px #05091455; }
+  .btn.primary:hover { background: #516bee; }
+  .btn:disabled { opacity: .65; cursor: wait; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .skip-link {
+    position: fixed; z-index: 200; top: 8px; left: 12px; clip-path: inset(50%);
+    background: var(--bg3); color: var(--text); padding: 10px 14px; border-radius: var(--radius);
+  }
+  .skip-link:focus { clip-path: none; }
+  #endpoint-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+    padding: 8px clamp(16px, 3vw, 40px); background: #10182a; border-bottom: 1px solid var(--border);
+  }
+  #endpoint-bar > div:first-of-type { min-width: 0; }
+  #endpoint-bar > label { margin: 0; color: var(--text2); }
+  #endpoint-bar .endpoint-input { font-family: var(--mono); min-height: 38px; }
+  .tabs { position: static; padding: 0 20px; background: transparent; }
+  .tab { background: transparent; border: 0; border-bottom: 2px solid transparent; font-family: inherit; }
+  .tab-panel { padding: 20px; }
+  .card { box-shadow: 0 8px 22px #05091425; }
+  .card-header { flex-wrap: wrap; background: #152039; }
+  .card-header h2, .card-header h3 { flex: 1; font-size: 14px; font-weight: 650; }
+  .card-header h2 { font-size: 16px; }
+  #presentment-card { scroll-margin-top: 72px; }
+  #request-summary:empty { display: none; }
+  .request-note { color: var(--amber); font-size: 13px; margin-top: 8px; }
+  #qr-container { padding: 18px; }
+  #qr-box { padding: 12px; min-width: 0; max-width: 100%; min-height: 0; }
+  #qr-box:has(.placeholder) { background: var(--bg3); border: 1px solid var(--border); }
+  #qr-box .placeholder { color: var(--text2); padding: 10px 14px; }
+  #qr-box canvas, #qr-box img { max-width: 100%; height: auto; }
+  #dc-launch-panel {
+    width: 100%; display: flex; align-items: center; gap: 16px; padding: 16px;
+    background: #1b2b51; border: 1px solid #3a5188; border-radius: var(--radius);
+  }
+  .presentment-copy { flex: 1; min-width: 0; }
+  .presentment-copy strong { font-size: 16px; }
+  .presentment-copy p { color: var(--text2); }
+  #dc-launch-panel .btn { width: auto; }
+  .uri-display { overflow-wrap: anywhere; }
+  #uri-display { max-height: 100px; overflow: auto; white-space: pre-wrap; }
+  .field-table { table-layout: fixed; overflow-wrap: anywhere; }
+  #request-summary .field-table td:first-child, #wallet-response-panel .field-table td:first-child { width: 34%; }
+  #wallet-response-panel img { max-width: 100% !important; }
+  .empty-state { padding: 20px 12px; }
+  #presentment-card { order: 0; }
+  #wallet-response-card { order: 1; }
+  #request-summary-card { order: 2; }
+  #annexc-debug-card { order: 3; }
+  .log-line .msg { overflow-wrap: anywhere; }
+
+  @media (max-width: 820px) {
+    header { gap: 8px; }
+    header .version { display: none; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    aside { border-right: 0; border-bottom: 1px solid var(--border); padding: 18px 14px; }
+    .tabs { padding: 0 10px; }
+    .tab { min-height: 48px; flex: 1; padding: 8px 5px; font-size: 12px; }
+    .tab-panel { padding: 12px; }
+    .card-header { padding: 10px 12px; gap: 8px; }
+    .card-body { padding: 12px; }
+    .btn, .btn.sm, .checkbox-item, #include-mdl-label { min-height: 44px; }
+    input[type=text], input[type=url], textarea, select { font-size: 16px; min-height: 44px; }
+    #endpoint-bar { padding: 8px 14px; }
+    #endpoint-bar > label { flex: 0 0 100%; }
+    .checkbox-grid > .checkbox-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    #endpoint-status:not(:empty) { flex: 0 0 100%; }
+    #qr-container { padding: 12px; }
+    #dc-launch-panel { align-items: stretch; flex-direction: column; gap: 12px; }
+    .response-meta { grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); }
+    .field-table td { padding-inline: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition-duration: 0s !important; }
   }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#workspace">Skip to request setup</a>
 
 <header>
   <div class="logo">
@@ -339,61 +453,39 @@
       <rect x="5" y="5" width="5" height="5" fill="#58a6ff"/>
       <rect x="12" y="5" width="5" height="5" fill="#58a6ff"/>
       <rect x="5" y="12" width="5" height="5" fill="#58a6ff"/>
-      <rect x="12" y="12" width="5" height="5" fill="#30363d"/>
+      <rect x="12" y="12" width="5" height="5" fill="#34436c"/>
     </svg>
-    <h1>mdoc Verifier Tester</h1>
+    <h1>mdoc Verifier</h1>
     <span class="version">ISO 18013-7 / 23220</span>
   </div>
   <div class="spacer"></div>
   <div class="status-dot" id="status-dot"></div>
-  <span class="status-label" id="status-label">ready</span>
+  <span class="status-label" id="status-label" role="status">Ready</span>
 </header>
 
-<div id="endpoint-bar" style="
-  border-bottom:1px solid var(--border);
-  background:var(--bg2);
-  padding:8px 24px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-size:12px;
-">
-  <span style="color:var(--text3);white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase">Endpoint</span>
-  <div style="position:relative;flex:1;max-width:560px">
-    <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:11px;pointer-events:none;font-family:var(--mono)">POST</span>
-    <input type="url" id="endpoint-bar-url" value=""
-      style="padding-left:44px;height:30px;font-family:var(--mono);font-size:12px;width:100%"
-      placeholder="https://your-server.example.com/mdoc/request"
-      oninput="syncEndpointUrl(this.value)">
+<div id="endpoint-bar" role="region" aria-label="Endpoint test" hidden>
+  <label for="endpoint-bar-url">Endpoint</label>
+  <div style="flex:1;max-width:560px">
+    <input type="url" id="endpoint-bar-url" class="endpoint-input" placeholder="https://">
   </div>
-  <button class="btn sm" onclick="testEndpoint()" id="test-endpoint-btn">Test ↗</button>
-  <div id="endpoint-status" style="font-size:11px;color:var(--text3)">not tested</div>
+  <button class="btn sm" data-action="testEndpoint" id="test-endpoint-btn">Test endpoint</button>
+  <div id="endpoint-status" role="status" style="font-size:11px;color:var(--text3)"></div>
 </div>
 
-<main>
-  <!-- ── Sidebar: Request Config ── -->
-  <aside>
+<main id="workspace">
+  <aside aria-label="Request setup">
     <div>
-      <div class="section-label">Presentation Request</div>
+      <h2 class="setup-title">Presentation request</h2>
       <div class="gap-sm">
         <div>
-          <label>Protocol</label>
+          <label for="protocol-mode">Protocol</label>
           <select id="protocol-mode">
-            <option value="mdoc">URI scheme / QR (existing demo)</option>
-            <option value="annex_c">Digital Credentials API / Annex C</option>
+            <option value="mdoc">QR / deep link</option>
+            <option value="annex_c">Digital Credentials API (Annex C)</option>
           </select>
         </div>
-        <div>
-          <label id="request-url-label">Request URL (request_url)</label>
-          <input type="url" id="request-url" value="" placeholder="https://..."
-          oninput="document.getElementById('endpoint-bar-url').value=this.value; document.getElementById('endpoint-status').textContent='not tested'; document.getElementById('endpoint-status').style.color='var(--text3)'">
-        </div>
-        <div>
-          <label>Verifier ID</label>
-          <input type="text" id="verifier-id" value="urn:example:verifier">
-        </div>
         <div id="doc-type-wrap">
-          <label>Doc Type</label>
+          <label for="doc-type">Doc type</label>
           <select id="doc-type">
             <option value="org.iso.23220.photoid.1">org.iso.23220.photoid.1</option>
             <option value="org.iso.18013.5.1.mDL">org.iso.18013.5.1.mDL</option>
@@ -401,7 +493,7 @@
           </select>
         </div>
         <div id="custom-doctype-row" style="display:none">
-          <label>Custom docType</label>
+          <label for="custom-doc-type">Custom docType</label>
           <input type="text" id="custom-doc-type" placeholder="org.example.credential.1">
         </div>
       </div>
@@ -409,135 +501,129 @@
 
     <hr class="divider">
 
-    <div>
-      <div class="section-label">Namespace: org.iso.23220.1</div>
-      <div class="checkbox-grid" id="photoid-elements">
-        <!-- injected by JS -->
-      </div>
-      <div style="margin-top:10px">
-        <label>Custom PhotoID attributes</label>
-        <input type="text" id="custom-photoid-attributes" placeholder="employee_id, access_level">
-      </div>
+    <div id="photoid-options">
+      <h3 class="section-label">PhotoID claims</h3>
+      <div class="checkbox-grid" id="photoid-elements"></div>
     </div>
 
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div class="section-label" style="margin:0">Namespace: org.iso.18013.5.1</div>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;margin:0">
-          <input type="checkbox" id="include-mdl" style="accent-color:var(--accent)"> <span style="font-size:11px;color:var(--text2)">Include</span>
+    <div id="mdl-options">
+      <div class="claim-heading">
+        <h3 class="section-label">mDL claims</h3>
+        <label id="include-mdl-label">
+          <input type="checkbox" id="include-mdl"> Include
         </label>
       </div>
-      <div class="checkbox-grid" id="mdl-elements" style="opacity:.4;pointer-events:none">
-        <!-- injected by JS -->
-      </div>
-      <div style="margin-top:10px">
-        <label>Custom mDL attributes</label>
-        <input type="text" id="custom-mdl-attributes" placeholder="restrictions_code, endorsements" disabled>
-      </div>
+      <div class="checkbox-grid" id="mdl-elements" hidden></div>
     </div>
 
-    <div>
-      <div class="section-label">Custom Namespace</div>
-      <div class="gap-sm">
+    <details class="advanced-options">
+      <summary>Advanced request settings</summary>
+      <div class="advanced-fields gap-sm">
         <div>
-          <label>Namespace</label>
+          <label for="request-url" id="request-url-label">Wallet transfer URL</label>
+          <input type="url" id="request-url" placeholder="Generated with the request" readonly>
+        </div>
+        <div>
+          <label for="verifier-id">Verifier ID</label>
+          <input type="text" id="verifier-id" value="urn:example:verifier">
+        </div>
+        <div id="custom-photoid-row">
+          <label for="custom-photoid-attributes">Custom PhotoID attributes</label>
+          <input type="text" id="custom-photoid-attributes" placeholder="employee_id, access_level">
+        </div>
+        <div id="custom-mdl-row" hidden>
+          <label for="custom-mdl-attributes">Custom mDL attributes</label>
+          <input type="text" id="custom-mdl-attributes" placeholder="restrictions_code, endorsements" disabled>
+        </div>
+        <div>
+          <label for="custom-namespace">Custom namespace</label>
           <input type="text" id="custom-namespace" placeholder="org.example.employee.1">
         </div>
         <div>
-          <label>Attributes</label>
+          <label for="custom-namespace-attributes">Custom namespace attributes</label>
           <input type="text" id="custom-namespace-attributes" placeholder="employee_id, department">
         </div>
       </div>
-    </div>
+    </details>
 
-    <hr class="divider">
-
-    <div>
-      <div class="section-label">Nonce</div>
-      <div class="nonce-display" id="nonce-display">
-        <span id="nonce-val" style="overflow:hidden;text-overflow:ellipsis;max-width:220px;white-space:nowrap">—</span>
-        <button class="btn sm" onclick="regenerateNonce()">↺</button>
-      </div>
-    </div>
-
-    <button class="btn primary" id="generate-btn" onclick="generateRequest()">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg>
-      Generate DeviceRequest
-    </button>
+    <button class="btn primary" id="generate-btn" data-action="generateRequest">Generate request</button>
   </aside>
 
   <!-- ── Main content ── -->
   <div class="content">
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('qr')">QR / Deep Link</div>
-      <div class="tab" onclick="switchTab('cbor')">CBOR Inspector</div>
-      <div class="tab" onclick="switchTab('log')">Log</div>
-    </div>
+    <nav class="tabs" aria-label="Workspace views">
+      <button type="button" class="tab active" data-tab="qr" aria-controls="tab-qr" aria-pressed="true">Presentment</button>
+      <button type="button" class="tab" data-tab="cbor" aria-controls="tab-cbor" aria-pressed="false">CBOR inspector</button>
+      <button type="button" class="tab" data-tab="log" aria-controls="tab-log" aria-pressed="false">Activity</button>
+    </nav>
 
     <!-- Tab: QR -->
     <div class="tab-panel active" id="tab-qr">
-      <div class="card">
+      <div class="card" id="presentment-card">
         <div class="card-header">
-          <h3 id="transport-card-title">ReaderEngagement QR Code</h3>
-          <button class="btn sm" id="download-qr-btn" onclick="downloadQR()" style="display:none">↓ PNG</button>
-          <button class="btn sm" id="copy-uri-btn" onclick="copyCurrentTransportValue()" style="display:none">Copy URI</button>
+          <h2 id="transport-card-title">Wallet presentment</h2>
+          <button class="btn sm" id="download-qr-btn" data-action="downloadQR" style="display:none">↓ PNG</button>
+          <button class="btn sm" id="copy-uri-btn" data-action="copyCurrentTransportValue" style="display:none">Copy URI</button>
         </div>
         <div id="qr-container">
           <div id="qr-box">
             <div class="placeholder">Generate a request<br>to see QR code</div>
           </div>
+          <div id="dc-launch-panel" hidden>
+            <div class="presentment-copy">
+              <strong>Ready to present</strong>
+              <p>Select a credential from a wallet on this device.</p>
+            </div>
+            <button class="btn primary" type="button" id="launch-dcapi-btn" data-action="launchStoredAnnexCRequest">
+              Open wallet
+            </button>
+          </div>
           <div id="mdoc-uri-panel" style="display:none;width:100%">
-            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;" id="transport-value-label">mdoc:// URI (ISO 18013-7 §8.3.3.1.2)</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;" id="transport-value-label">mdoc:// URI</div>
             <div class="uri-display" id="uri-display"></div>
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-              <a id="open-deeplink" href="#" class="btn sm" onclick="openDeeplink(event)">
+              <a id="open-deeplink" class="btn sm" data-action="openDeeplink">
                 Open on this device ↗
               </a>
-              <button class="btn sm" id="launch-dcapi-btn" onclick="launchStoredAnnexCRequest()" style="display:none">
-                Present From This Device
-              </button>
-              <button class="btn sm" onclick="copyCurrentTransportValue()" id="copy-transport-inline-btn">Copy URI</button>
-              <button class="btn sm" onclick="generateRequest()">↺ Regenerate</button>
+              <button class="btn sm" data-action="generateRequest">↺ Regenerate</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header"><h3>Request Summary</h3></div>
-        <div class="card-body" id="request-summary">
-          <div class="empty-state">
-            <div class="icon">⬡</div>
-            <p>No request generated yet</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
+      <div class="card" id="wallet-response-card">
         <div class="card-header">
-          <h3>Wallet Response</h3>
+          <h3>Wallet response</h3>
           <span id="wallet-response-badge" class="badge info">idle</span>
         </div>
-        <div class="card-body" id="wallet-response-panel">
+        <div class="card-body" id="wallet-response-panel" aria-live="polite">
           <div class="empty-state">
-            <div class="icon">⇄</div>
             <p>Generate a request to start watching for the wallet response</p>
           </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h3>Annex C Debug</h3>
-          <span id="annexc-debug-badge" class="badge info">idle</span>
+      <div class="card" id="request-summary-card">
+        <div class="card-header"><h3>Request summary</h3></div>
+        <div class="card-body" id="request-summary">
+          <div class="empty-state">
+            <p>No request generated yet</p>
+          </div>
         </div>
+      </div>
+
+      <details class="card" id="annexc-debug-card" hidden>
+        <summary class="card-header">
+          <h3>Annex C diagnostics</h3>
+          <span id="annexc-debug-badge" class="badge info">idle</span>
+        </summary>
         <div class="card-body" id="annexc-debug-panel">
           <div class="empty-state">
             <div class="icon">⌁</div>
             <p>Generate an Annex C request to capture environment and request diagnostics</p>
           </div>
         </div>
-      </div>
+      </details>
     </div>
 
     <!-- Tab: CBOR Inspector -->
@@ -546,19 +632,19 @@
         <div class="card-header">
           <h3>CBOR Encoder / Decoder</h3>
           <div style="display:flex;gap:6px;">
-            <button class="btn sm" onclick="loadCurrentRequest()">Load Current Request</button>
-            <button class="btn sm" onclick="clearCbor()">Clear</button>
+            <button class="btn sm" data-action="loadCurrentRequest">Load Current Request</button>
+            <button class="btn sm" data-action="clearCbor">Clear</button>
           </div>
         </div>
         <div class="card-body">
           <div class="gap-sm">
             <div>
-              <label>Hex / Base64 Input (paste any CBOR-encoded payload)</label>
+              <label for="cbor-input">Hex / Base64 Input (paste any CBOR-encoded payload)</label>
               <textarea id="cbor-input" rows="4" placeholder="a50068312e3120...  or  pQBoMS4xIA=="></textarea>
             </div>
             <div style="display:flex;gap:6px">
-              <button class="btn" onclick="decodeCbor()">Decode ↓</button>
-              <button class="btn" onclick="encodeCborFromJson()">Encode from JSON ↑</button>
+              <button class="btn" data-action="decodeCbor">Decode ↓</button>
+              <button class="btn" data-action="encodeCborFromJson">Encode from JSON ↑</button>
             </div>
             <div>
               <label>Decoded Tree</label>
@@ -567,8 +653,8 @@
               </div>
             </div>
             <div>
-              <label>JSON representation</label>
-              <textarea id="cbor-json-out" rows="6" readonly style="color:var(--text2)"></textarea>
+              <label for="cbor-json-out">JSON</label>
+              <textarea id="cbor-json-out" rows="6" style="color:var(--text2)"></textarea>
             </div>
           </div>
         </div>
@@ -587,7 +673,7 @@
       <div class="card">
         <div class="card-header">
           <h3>Session Log</h3>
-          <button class="btn sm danger" onclick="clearLog()">Clear</button>
+          <button class="btn sm danger" data-action="clearLog">Clear</button>
         </div>
         <div class="card-body">
           <div class="log" id="log-panel"></div>
@@ -607,1433 +693,6 @@
   </div>
 </main>
 
-<script>
-// ════════════════════════════════════════════════════════════
-// CBOR implementation (minimal, no deps)
-// ════════════════════════════════════════════════════════════
-const CBOR = (() => {
-  function encode(val) {
-    const parts = [];
-    function w(v) { parts.push(v); }
-    function encodeVal(v) {
-      if (v === null || v === undefined) { w(new Uint8Array([0xf6])); return; }
-      if (typeof v === 'boolean') { w(new Uint8Array([v ? 0xf5 : 0xf4])); return; }
-      if (typeof v === 'number') {
-        if (Number.isInteger(v) && v >= 0 && v <= 0xffffffff) {
-          w(encodeUint(0, v));
-        } else if (Number.isInteger(v) && v < 0) {
-          w(encodeUint(1, -v - 1));
-        } else {
-          const buf = new ArrayBuffer(9); const dv = new DataView(buf);
-          dv.setUint8(0, 0xfb); dv.setFloat64(1, v); w(new Uint8Array(buf));
-        }
-        return;
-      }
-      if (typeof v === 'bigint') {
-        if (v >= 0n) w(encodeUint(0, Number(v)));
-        else w(encodeUint(1, Number(-v - 1n)));
-        return;
-      }
-      if (typeof v === 'string') {
-        const bytes = new TextEncoder().encode(v);
-        w(encodeUint(3, bytes.length)); w(bytes); return;
-      }
-      if (v instanceof Uint8Array) {
-        w(encodeUint(2, v.length)); w(v); return;
-      }
-      if (Array.isArray(v)) {
-        w(encodeUint(4, v.length));
-        v.forEach(encodeVal); return;
-      }
-      if (v instanceof Map) {
-        w(encodeUint(5, v.size));
-        v.forEach((val, key) => { encodeVal(key); encodeVal(val); }); return;
-      }
-      if (typeof v === 'object') {
-        const keys = Object.keys(v);
-        w(encodeUint(5, keys.length));
-        keys.forEach(k => { encodeVal(k); encodeVal(v[k]); }); return;
-      }
-    }
-    function encodeUint(major, val) {
-      const m = major << 5;
-      if (val <= 23) return new Uint8Array([m | val]);
-      if (val <= 0xff) return new Uint8Array([m | 24, val]);
-      if (val <= 0xffff) { const b = new ArrayBuffer(3); const dv = new DataView(b); dv.setUint8(0, m | 25); dv.setUint16(1, val); return new Uint8Array(b); }
-      if (val <= 0xffffffff) { const b = new ArrayBuffer(5); const dv = new DataView(b); dv.setUint8(0, m | 26); dv.setUint32(1, val); return new Uint8Array(b); }
-      const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, m | 27); dv.setBigUint64(1, BigInt(val)); return new Uint8Array(b);
-    }
-    encodeVal(val);
-    const total = parts.reduce((a, b) => a + b.length, 0);
-    const out = new Uint8Array(total); let off = 0;
-    parts.forEach(p => { out.set(p, off); off += p.length; });
-    return out;
-  }
-
-  function decode(buf) {
-    const dv = new DataView(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset, buf.byteLength);
-    let pos = 0;
-    function read() {
-      const b = dv.getUint8(pos++);
-      const major = b >> 5, add = b & 0x1f;
-      let len;
-      if (add <= 23) len = add;
-      else if (add === 24) { len = dv.getUint8(pos++); }
-      else if (add === 25) { len = dv.getUint16(pos); pos += 2; }
-      else if (add === 26) { len = dv.getUint32(pos); pos += 4; }
-      else if (add === 27) { len = Number(dv.getBigUint64(pos)); pos += 8; }
-      else if (add === 31) len = Infinity;
-
-      if (major === 0) return len;
-      if (major === 1) return -1 - len;
-      if (major === 2) {
-        const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset + pos, len);
-        pos += len; return bytes;
-      }
-      if (major === 3) {
-        const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer, buf.byteOffset + pos, len);
-        pos += len; return new TextDecoder().decode(bytes);
-      }
-      if (major === 4) {
-        if (len === Infinity) {
-          const arr = [];
-          while (true) { const b2 = dv.getUint8(pos); if (b2 === 0xff) { pos++; break; } arr.push(read()); } return arr;
-        }
-        const arr = []; for (let i = 0; i < len; i++) arr.push(read()); return arr;
-      }
-      if (major === 5) {
-        if (len === Infinity) {
-          const map = new Map();
-          while (true) { const b2 = dv.getUint8(pos); if (b2 === 0xff) { pos++; break; } map.set(read(), read()); } return map;
-        }
-        const map = new Map(); for (let i = 0; i < len; i++) map.set(read(), read());
-        return map;
-      }
-      if (major === 6) { return { _tag: len, _val: read() }; }
-      if (major === 7) {
-        if (len === 20) return false; if (len === 21) return true;
-        if (len === 22) return null; if (len === 23) return undefined;
-        if (add === 25) { pos += 2; return NaN; }
-        if (add === 26) { const f = dv.getFloat32(pos); pos += 4; return f; }
-        if (add === 27) { const f = dv.getFloat64(pos); pos += 8; return f; }
-        return undefined;
-      }
-    }
-    return read();
-  }
-
-  return { encode, decode };
-})();
-
-// ════════════════════════════════════════════════════════════
-// State
-// ════════════════════════════════════════════════════════════
-let state = {
-  nonce: null,
-  readerPrivKey: null,
-  readerPubKey: null,
-  readerEngagementBytes: null,
-  deviceRequestPayload: null,
-  mdocUri: null,
-  sessionNonce: null,
-  sessionId: null,
-  sessionStatusTimer: null,
-  activeProtocol: 'mdoc',
-  transportValue: null,
-  annexCDeviceRequestB64: null,
-  annexCRequestPayload: null,
-  annexCDebug: null,
-};
-let qrInstance = null;
-
-// ════════════════════════════════════════════════════════════
-// Element definitions
-// ════════════════════════════════════════════════════════════
-const PHOTOID_ELEMENTS = ['portrait','family_name','given_name','birth_date','issue_date','expiry_date','issuing_country','document_number','age_over_18','age_in_years','age_birth_year'];
-const MDL_ELEMENTS = ['family_name','given_name','birth_date','issuing_country','portrait','driving_privileges'];
-
-// ════════════════════════════════════════════════════════════
-// Init
-// ════════════════════════════════════════════════════════════
-function init() {
-  const defaultRequestUrl = `${window.location.origin}/mdoc/request`;
-  document.getElementById('request-url').value = defaultRequestUrl;
-  document.getElementById('endpoint-bar-url').value = defaultRequestUrl;
-  buildCheckboxes('photoid-elements', PHOTOID_ELEMENTS, ['portrait','family_name','given_name','birth_date','age_over_18']);
-  buildCheckboxes('mdl-elements', MDL_ELEMENTS, ['family_name','given_name','birth_date','issuing_country']);
-  regenerateNonce();
-
-  document.getElementById('include-mdl').addEventListener('change', e => {
-    const mdl = document.getElementById('mdl-elements');
-    mdl.style.opacity = e.target.checked ? '1' : '.4';
-    mdl.style.pointerEvents = e.target.checked ? 'auto' : 'none';
-    document.getElementById('custom-mdl-attributes').disabled = !e.target.checked;
-  });
-  document.getElementById('doc-type').addEventListener('change', e => {
-    document.getElementById('custom-doctype-row').style.display = e.target.value === 'custom' ? 'block' : 'none';
-  });
-  document.getElementById('protocol-mode').addEventListener('change', e => {
-    state.activeProtocol = e.target.value;
-    updateProtocolModeUi();
-  });
-
-  log('info', 'ISO 18013-7 Verifier Tester initialised (in-browser crypto)');
-  log('info', 'Ephemeral key pair will be generated on each DeviceRequest');
-  updateSessionTable();
-  updateProtocolModeUi();
-}
-
-function buildCheckboxes(containerId, elements, defaultChecked) {
-  const container = document.getElementById(containerId);
-  elements.forEach(el => {
-    const div = document.createElement('div');
-    div.className = 'checkbox-item' + (defaultChecked.includes(el) ? ' checked' : '');
-    div.innerHTML = `<input type="checkbox" ${defaultChecked.includes(el) ? 'checked' : ''}><span>${el}</span>`;
-    const cb = div.querySelector('input');
-    cb.addEventListener('change', () => {
-      div.classList.toggle('checked', cb.checked);
-    });
-    container.appendChild(div);
-  });
-}
-
-function getCheckedElements(containerId) {
-  const checks = document.querySelectorAll(`#${containerId} input[type=checkbox]`);
-  const result = {};
-  checks.forEach(c => { if (c.checked) result[c.nextElementSibling.textContent] = false; });
-  return result;
-}
-
-function parseCustomAttributes(raw) {
-  return Array.from(
-    new Set(
-      raw
-        .split(/[,\n]/)
-        .map(value => value.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-// ════════════════════════════════════════════════════════════
-// Nonce
-// ════════════════════════════════════════════════════════════
-function regenerateNonce() {
-  state.nonce = crypto.getRandomValues(new Uint8Array(16));
-  const hex = Array.from(state.nonce).map(b => b.toString(16).padStart(2,'0')).join('');
-  document.getElementById('nonce-val').textContent = hex;
-  log('info', `Nonce regenerated: ${hex.slice(0,16)}…`);
-}
-
-function updateProtocolModeUi() {
-  const mode = document.getElementById('protocol-mode').value;
-  state.activeProtocol = mode;
-  const isAnnexC = mode === 'annex_c';
-  document.getElementById('request-url-label').textContent = isAnnexC ? 'Response endpoint (generated by backend)' : 'Request URL (request_url)';
-  document.getElementById('request-url').placeholder = isAnnexC ? 'Generated after session creation' : 'https://...';
-  document.getElementById('request-url').readOnly = isAnnexC;
-  document.getElementById('transport-card-title').textContent = isAnnexC ? 'Digital Credentials API Request' : 'ReaderEngagement QR Code';
-  document.getElementById('generate-btn').lastChild.textContent = isAnnexC ? ' Generate Annex C Request' : ' Generate DeviceRequest';
-  document.getElementById('doc-type-wrap').style.opacity = isAnnexC ? '.6' : '1';
-  document.getElementById('doc-type').disabled = isAnnexC;
-  document.getElementById('custom-doctype-row').style.display = !isAnnexC && document.getElementById('doc-type').value === 'custom' ? 'block' : 'none';
-  document.getElementById('include-mdl').disabled = isAnnexC;
-  document.getElementById('custom-mdl-attributes').disabled = isAnnexC || !document.getElementById('include-mdl').checked;
-  document.getElementById('mdl-elements').style.opacity = isAnnexC ? '.2' : (document.getElementById('include-mdl').checked ? '1' : '.4');
-  document.getElementById('mdl-elements').style.pointerEvents = isAnnexC ? 'none' : (document.getElementById('include-mdl').checked ? 'auto' : 'none');
-  if (isAnnexC) {
-    document.getElementById('request-url').value = '';
-    document.getElementById('endpoint-bar-url').value = `${window.location.origin}/dc/session`;
-  } else {
-    document.getElementById('request-url').value = `${window.location.origin}/mdoc/request`;
-    document.getElementById('endpoint-bar-url').value = `${window.location.origin}/mdoc/request`;
-  }
-  document.getElementById('endpoint-status').textContent = 'not tested';
-  document.getElementById('endpoint-status').style.color = 'var(--text3)';
-  resetTransportPanel(isAnnexC);
-}
-
-function resetTransportPanel(isAnnexC) {
-  stopSessionPolling();
-  state.sessionId = null;
-  state.transportValue = null;
-  state.annexCDeviceRequestB64 = null;
-  state.annexCRequestPayload = null;
-  state.annexCDebug = null;
-  state.mdocUri = null;
-  const qrBox = document.getElementById('qr-box');
-  qrBox.innerHTML = isAnnexC
-    ? '<div class="placeholder">Generate a request<br>to see Annex C payload</div>'
-    : '<div class="placeholder">Generate a request<br>to see QR code</div>';
-  document.getElementById('mdoc-uri-panel').style.display = 'none';
-  document.getElementById('download-qr-btn').style.display = 'none';
-  document.getElementById('copy-uri-btn').style.display = 'none';
-  document.getElementById('open-deeplink').style.display = isAnnexC ? 'none' : 'inline-flex';
-  document.getElementById('launch-dcapi-btn').style.display = 'none';
-  document.getElementById('copy-transport-inline-btn').textContent = isAnnexC ? 'Copy Request JSON' : 'Copy URI';
-  document.getElementById('copy-uri-btn').textContent = isAnnexC ? 'Copy Request JSON' : 'Copy URI';
-  document.getElementById('transport-value-label').textContent = isAnnexC
-    ? 'Digital Credentials API request object'
-    : 'mdoc:// URI (ISO 18013-7 §8.3.3.1.2)';
-  setWalletResponseState('idle', isAnnexC
-    ? 'Generate a request to start watching for a Digital Credentials API response.'
-    : 'Generate a request to start watching for the wallet response.');
-  renderAnnexCDebug();
-}
-
-function canUseDigitalCredentialsApi() {
-  return typeof window.DigitalCredential !== 'undefined'
-    && typeof navigator.credentials?.get === 'function';
-}
-
-function isSafariBrowser() {
-  const ua = navigator.userAgent || '';
-  return /Safari\//.test(ua)
-    && !/(Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPiOS|Android)/.test(ua);
-}
-
-function allowsMdocProtocol() {
-  if (typeof window.DigitalCredential === 'undefined') return false;
-  if (typeof window.DigitalCredential.userAgentAllowsProtocol !== 'function') return true;
-  try {
-    return window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
-  } catch (_err) {
-    return false;
-  }
-}
-
-function currentAnnexCEnvironment() {
-  let protocolAllowed = null;
-  let allowsError = null;
-  if (typeof window.DigitalCredential !== 'undefined' && typeof window.DigitalCredential.userAgentAllowsProtocol === 'function') {
-    try {
-      protocolAllowed = window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
-    } catch (err) {
-      allowsError = err && typeof err.message === 'string' ? err.message : String(err);
-    }
-  }
-  return {
-    timestamp: new Date().toISOString(),
-    origin: window.location.origin,
-    href: window.location.href,
-    userAgent: navigator.userAgent,
-    platform: navigator.platform || '',
-    language: navigator.language || '',
-    languages: navigator.languages || [],
-    secureContext: window.isSecureContext,
-    digitalCredentialPresent: typeof window.DigitalCredential !== 'undefined',
-    credentialsGetPresent: typeof navigator.credentials?.get === 'function',
-    userAgentAllowsProtocolPresent: typeof window.DigitalCredential?.userAgentAllowsProtocol === 'function',
-    orgIsoMdocAllowed: protocolAllowed,
-    orgIsoMdocAllowedError: allowsError,
-  };
-}
-
-function updateAnnexCDebug(patch = {}, phase = null) {
-  const existing = state.annexCDebug || {};
-  state.annexCDebug = {
-    ...existing,
-    ...patch,
-    environment: {
-      ...(existing.environment || {}),
-      ...currentAnnexCEnvironment(),
-      ...(patch.environment || {}),
-    },
-  };
-  if (phase) {
-    state.annexCDebug.phase = phase;
-  }
-  renderAnnexCDebug();
-}
-
-function renderAnnexCDebug() {
-  const badge = document.getElementById('annexc-debug-badge');
-  const panel = document.getElementById('annexc-debug-panel');
-  const debug = state.annexCDebug;
-  if (!debug) {
-    badge.className = 'badge info';
-    badge.textContent = 'idle';
-    panel.innerHTML = `
-      <div class="empty-state">
-        <div class="icon">⌁</div>
-        <p>Generate an Annex C request to capture environment and request diagnostics</p>
-      </div>
-    `;
-    return;
-  }
-
-  const phase = debug.phase || 'captured';
-  badge.className = debug.lastError ? 'badge err' : 'badge info';
-  badge.textContent = phase;
-
-  const sections = [
-    ['Environment', debug.environment],
-    ['Session', debug.session],
-    ['Selected Claims', debug.selection],
-    ['Request Payload', debug.requestPayload],
-    ['Last DC API Result', debug.lastResult],
-    ['Last Error', debug.lastError],
-  ].filter(([, value]) => value && (!(typeof value === 'object') || Object.keys(value).length));
-
-  panel.innerHTML = sections.map(([title, value]) => `
-    <div class="gap-sm" style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">${escHtml(title)}</div>
-      <div class="uri-display" style="max-height:220px;overflow:auto;white-space:pre-wrap">${escHtml(safeJsonStringify(value))}</div>
-    </div>
-  `).join('') || `
-    <div class="empty-state">
-      <div class="icon">⌁</div>
-      <p>No Annex C diagnostics captured yet</p>
-    </div>
-  `;
-}
-
-function normalizeDigitalCredentialPayload(credential) {
-  if (!credential || typeof credential !== 'object') {
-    throw new Error('Browser returned an empty Digital Credential response');
-  }
-  if (credential.data && typeof credential.data === 'object') {
-    if (typeof credential.data.response === 'string') {
-      return credential;
-    }
-    if (typeof credential.data.enc === 'string' && typeof credential.data.cipherText === 'string') {
-      return credential;
-    }
-  }
-  if (typeof credential.response === 'string') {
-    return {
-      protocol: credential.protocol || 'org-iso-mdoc',
-      data: {
-        response: credential.response,
-      },
-    };
-  }
-  if (typeof credential.enc === 'string' && typeof credential.cipherText === 'string') {
-    return {
-      protocol: credential.protocol || 'org-iso-mdoc',
-      data: {
-        enc: credential.enc,
-        cipherText: credential.cipherText,
-      },
-    };
-  }
-  throw new Error('Digital Credential response did not include Annex C data.response or enc/cipherText data');
-}
-
-async function triggerAnnexCPresentation(requestPayload) {
-  if (!canUseDigitalCredentialsApi()) {
-    updateAnnexCDebug({
-      lastError: {
-        stage: 'preflight',
-        message: 'Digital Credentials API is not available in this browser',
-      },
-    }, 'preflight_failed');
-    setWalletResponseState('waiting', 'Digital Credentials API is not available in this browser. The Annex C request was generated, but the browser cannot launch a wallet/provider flow here.');
-    log('warn', 'Digital Credentials API is unavailable in this browser');
-    return;
-  }
-  if (!allowsMdocProtocol()) {
-    updateAnnexCDebug({
-      lastError: {
-        stage: 'preflight',
-        message: 'Browser reported org-iso-mdoc is not allowed',
-      },
-    }, 'preflight_failed');
-    setWalletResponseState('waiting', 'This browser does not allow the org-iso-mdoc protocol. The Annex C request was generated, but no browser-mediated launch is available.');
-    log('warn', 'Browser reported org-iso-mdoc is not allowed');
-    return;
-  }
-
-  updateAnnexCDebug({
-    lastError: null,
-    lastResult: {
-      stage: 'before_credentials_get',
-      requestProtocols: (requestPayload.requests || []).map(item => item.protocol),
-    },
-  }, 'launching');
-  setWalletResponseState('waiting', 'Launching the browser Digital Credentials flow. If a provider is available, the native chooser/sheet should appear.');
-  log('info', 'Calling navigator.credentials.get() for org-iso-mdoc');
-
-  try {
-    const credential = await navigator.credentials.get({
-      mediation: 'required',
-      digital: requestPayload,
-    });
-    updateAnnexCDebug({
-      lastResult: {
-        stage: 'credentials_get_resolved',
-        credential: credential,
-      },
-      lastError: null,
-    }, 'response_received');
-    const normalized = normalizeDigitalCredentialPayload(credential);
-    log('ok', 'Digital Credentials API returned a response payload');
-
-    const res = await fetch(`/dc/response/${state.sessionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(normalized),
-    });
-    if (!res.ok) {
-      throw new Error(`Verifier response upload failed: ${res.status}`);
-    }
-    log('ok', 'Digital credential response sent to verifier backend');
-    await pollSessionStatus('annex_c');
-  } catch (err) {
-    const message = err && typeof err.message === 'string' ? err.message : String(err);
-    updateAnnexCDebug({
-      lastError: {
-        stage: 'credentials_get',
-        name: err && err.name ? err.name : null,
-        message,
-        stack: err && err.stack ? err.stack : null,
-      },
-    }, 'error');
-    setWalletResponseState('error', `Digital credential launch failed: ${message}`);
-    log('err', `Digital credential launch failed: ${message}`);
-    throw err;
-  }
-}
-
-async function launchStoredAnnexCRequest() {
-  if (!state.sessionId || !state.annexCRequestPayload) {
-    setWalletResponseState('error', 'No Annex C request is ready yet. Generate a request first.');
-    log('err', 'No stored Annex C request is available to launch');
-    return;
-  }
-  await triggerAnnexCPresentation(state.annexCRequestPayload);
-}
-
-// ════════════════════════════════════════════════════════════
-// Web Crypto key generation (ECDSA P-256)
-// ════════════════════════════════════════════════════════════
-async function generateEphemeralKeypair() {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: 'ECDSA', namedCurve: 'P-256' }, true,
-    ['sign', 'verify']
-  );
-  return keyPair;
-}
-
-async function exportPublicKeyCose(publicKey) {
-  const raw = await crypto.subtle.exportKey('raw', publicKey);
-  const bytes = new Uint8Array(raw);
-  // raw = 04 || X (32) || Y (32)
-  return new Map([
-    [1, 2],          // kty: EC2
-    [-1, 1],         // crv: P-256
-    [-2, bytes.slice(1, 33)],  // x
-    [-3, bytes.slice(33, 65)], // y
-  ]);
-}
-
-async function signCoseSign1(payload, privateKey) {
-  const protectedHeader = CBOR.encode({ 1: -7 }); // ES256
-  const sigStructure = CBOR.encode(['Signature1', protectedHeader, new Uint8Array(0), payload]);
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: { name: 'SHA-256' } },
-    privateKey,
-    sigStructure
-  );
-  // Browsers differ here: some return raw R||S, others ASN.1 DER.
-  const sig = derToRaw(new Uint8Array(signature));
-  return CBOR.encode([protectedHeader, new Map(), payload, sig]);
-}
-
-function derToRaw(der) {
-  if (der.length === 64) return der;
-  if (der[0] !== 0x30) throw new Error('Unsupported ECDSA signature format');
-
-  let pos = 1;
-  const seqLen = der[pos++];
-  if (seqLen & 0x80) {
-    const lenBytes = seqLen & 0x7f;
-    pos += lenBytes;
-  }
-
-  // Simple DER SEQUENCE -> r, s extraction
-  if (der[pos] !== 0x02) throw new Error('Expected INTEGER');
-  pos++;
-  const rLen = der[pos++];
-  const r = der.slice(pos, pos + rLen);
-  pos += rLen;
-  if (der[pos] !== 0x02) throw new Error('Expected INTEGER');
-  pos++;
-  const sLen = der[pos++];
-  const s = der.slice(pos, pos + sLen);
-  // Pad/trim to 32 bytes
-  const padTo32 = arr => {
-    const r32 = new Uint8Array(32);
-    const src = arr.length > 32 ? arr.slice(arr.length - 32) : arr;
-    r32.set(src, 32 - src.length);
-    return r32;
-  };
-  const raw = new Uint8Array(64);
-  raw.set(padTo32(r), 0);
-  raw.set(padTo32(s), 32);
-  return raw;
-}
-
-// ════════════════════════════════════════════════════════════
-// Build ReaderEngagement
-// ════════════════════════════════════════════════════════════
-function buildReaderEngagement(coseKey, requestUrl) {
-  const eReaderKeyBytes = { _tag: 24, _val: CBOR.encode(coseKey) }; // tag(24, bstr)
-  // Encode as CBOR map manually
-  return new Map([
-    [0, "1.1"],
-    [1, [1, eReaderKeyBytes]],
-    [2, [[4, 1, new Map([[0, requestUrl]])]]],
-  ]);
-}
-
-// We need a custom encode that handles CBOR tags
-function encodeCborWithTags(val) {
-  const parts = [];
-  function w(v) { parts.push(v instanceof Uint8Array ? v : new Uint8Array(v)); }
-  function encodeVal(v) {
-    if (v === null || v === undefined) { w([0xf6]); return; }
-    if (typeof v === 'boolean') { w([v ? 0xf5 : 0xf4]); return; }
-    if (typeof v === 'number') {
-      if (Number.isInteger(v) && v >= 0 && v <= 0xffffffff) { w(encodeUint(0, v)); }
-      else if (Number.isInteger(v) && v < 0) { w(encodeUint(1, -v - 1)); }
-      else { const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, 0xfb); dv.setFloat64(1, v); w(new Uint8Array(b)); }
-      return;
-    }
-    if (typeof v === 'bigint') { v >= 0n ? w(encodeUint(0, Number(v))) : w(encodeUint(1, Number(-v-1n))); return; }
-    if (typeof v === 'string') { const bytes = new TextEncoder().encode(v); w(encodeUint(3, bytes.length)); w(bytes); return; }
-    if (v instanceof Uint8Array) { w(encodeUint(2, v.length)); w(v); return; }
-    if (Array.isArray(v)) { w(encodeUint(4, v.length)); v.forEach(encodeVal); return; }
-    if (v && typeof v === 'object' && '_tag' in v) {
-      w(encodeUint(6, v._tag));
-      if (v._val instanceof Uint8Array) {
-        w(encodeUint(2, v._val.length)); w(v._val);
-      } else {
-        encodeVal(v._val);
-      }
-      return;
-    }
-    if (v instanceof Map) {
-      w(encodeUint(5, v.size));
-      v.forEach((val2, key2) => { encodeVal(key2); encodeVal(val2); }); return;
-    }
-    if (typeof v === 'object') {
-      const keys = Object.keys(v);
-      w(encodeUint(5, keys.length));
-      keys.forEach(k => { encodeVal(k); encodeVal(v[k]); }); return;
-    }
-  }
-  function encodeUint(major, val) {
-    const m = major << 5;
-    if (val <= 23) return [m | val];
-    if (val <= 0xff) return [m | 24, val];
-    if (val <= 0xffff) { const b = new ArrayBuffer(3); const dv = new DataView(b); dv.setUint8(0, m | 25); dv.setUint16(1, val); return new Uint8Array(b); }
-    if (val <= 0xffffffff) { const b = new ArrayBuffer(5); const dv = new DataView(b); dv.setUint8(0, m | 26); dv.setUint32(1, val); return new Uint8Array(b); }
-    const b = new ArrayBuffer(9); const dv = new DataView(b); dv.setUint8(0, m | 27); dv.setBigUint64(1, BigInt(val)); return new Uint8Array(b);
-  }
-  encodeVal(val);
-  const total = parts.reduce((a, b) => a + b.length, 0);
-  const out = new Uint8Array(total); let off = 0;
-  parts.forEach(p => { out.set(p, off); off += p.length; }); return out;
-}
-
-// ════════════════════════════════════════════════════════════
-// Main: generate request
-// ════════════════════════════════════════════════════════════
-async function generateRequest() {
-  const btn = document.getElementById('generate-btn');
-  btn.textContent = 'Generating…'; btn.disabled = true;
-  setStatus('generating…', '#d29922');
-
-  try {
-    const verifierId = document.getElementById('verifier-id').value.trim();
-    const protocol = state.activeProtocol;
-    const docTypeSel = document.getElementById('doc-type').value;
-    const docType = docTypeSel === 'custom' ? document.getElementById('custom-doc-type').value.trim() : docTypeSel;
-    const includeMdl = protocol === 'annex_c' ? false : document.getElementById('include-mdl').checked;
-
-    const selectedPhotoid = Object.keys(getCheckedElements('photoid-elements'));
-    const selectedMdl = includeMdl ? Object.keys(getCheckedElements('mdl-elements')) : [];
-    const customPhotoidAttributes = parseCustomAttributes(document.getElementById('custom-photoid-attributes').value);
-    const customMdlAttributes = includeMdl
-      ? parseCustomAttributes(document.getElementById('custom-mdl-attributes').value)
-      : [];
-    const customNamespace = document.getElementById('custom-namespace').value.trim();
-    const customNamespaceAttributes = parseCustomAttributes(document.getElementById('custom-namespace-attributes').value);
-    const requestedElements = Array.from(new Set([...selectedPhotoid, ...customPhotoidAttributes]));
-    const requestedMdlElements = Array.from(new Set([...selectedMdl, ...customMdlAttributes]));
-    const requestedNamespaces = [
-      { name: 'org.iso.23220.1', elements: requestedElements },
-      ...(requestedMdlElements.length ? [{ name: 'org.iso.18013.5.1', elements: requestedMdlElements }] : []),
-      ...(customNamespace && customNamespaceAttributes.length ? [{ name: customNamespace, elements: customNamespaceAttributes }] : []),
-    ];
-
-    log('info', `Creating server session for ${docType}`);
-    log('info', `PhotoID elements: ${requestedElements.join(', ') || 'none'}`);
-    if (requestedMdlElements.length) {
-      log('info', `mDL elements: ${requestedMdlElements.join(', ')}`);
-    }
-    if (customNamespace && customNamespaceAttributes.length) {
-      log('info', `Custom namespace ${customNamespace}: ${customNamespaceAttributes.join(', ')}`);
-    }
-
-    const res = await fetch(protocol === 'annex_c' ? '/dc/session' : '/mdoc/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(protocol === 'annex_c'
-        ? {
-            verifier_id: verifierId,
-            photoid_elements: selectedPhotoid,
-            custom_photoid_attributes: customPhotoidAttributes,
-            custom_namespace: customNamespace,
-            custom_namespace_attributes: customNamespaceAttributes,
-          }
-        : {
-            verifier_id: verifierId,
-            doc_type: docType,
-            include_mdl: includeMdl,
-            photoid_elements: selectedPhotoid,
-            mdl_elements: selectedMdl,
-            custom_photoid_attributes: customPhotoidAttributes,
-            custom_mdl_attributes: customMdlAttributes,
-            custom_namespace: customNamespace,
-            custom_namespace_attributes: customNamespaceAttributes,
-          }),
-    });
-    if (!res.ok) {
-      throw new Error(`Session creation failed: ${res.status}`);
-    }
-    const payload = await res.json();
-    state.sessionNonce = null;
-    state.sessionId = payload.session_id;
-    if (protocol === 'annex_c') {
-      const requestJson = JSON.stringify(payload.request, null, 2);
-      const mdocRequest = (payload.request.requests || []).find(item =>
-        item && item.protocol === 'org-iso-mdoc' && item.data
-      ) || (payload.request.requests || [])[0];
-      if (!mdocRequest || !mdocRequest.data || !mdocRequest.data.deviceRequest) {
-        throw new Error('Annex C request did not contain an mdoc request payload');
-      }
-      const deviceRequestBytes = base64UrlToBytes(mdocRequest.data.deviceRequest);
-      state.readerEngagementBytes = deviceRequestBytes;
-      state.annexCDeviceRequestB64 = mdocRequest.data.deviceRequest;
-      state.annexCRequestPayload = payload.request;
-      state.transportValue = requestJson;
-      state.mdocUri = null;
-      updateAnnexCDebug({
-        selection: {
-          verifierId,
-          docType: payload.doc_type,
-          requestedNamespaces,
-          photoidElements: selectedPhotoid,
-          customPhotoidAttributes,
-          customNamespace,
-          customNamespaceAttributes,
-        },
-        session: {
-          sessionId: payload.session_id,
-          responseUrl: payload.response_url,
-          statusUrl: payload.status_url,
-          expiresAt: payload.expires_at,
-          requestNonceHex: payload.request_nonce_hex,
-          recipientPublicKeyHex: payload.recipient_public_key_hex,
-          deviceRequestBytes: deviceRequestBytes.length,
-        },
-        requestPayload: payload.request,
-        lastError: null,
-        lastResult: {
-          stage: 'session_created',
-        },
-      }, 'request_ready');
-      document.getElementById('request-url').value = payload.response_url;
-      document.getElementById('endpoint-bar-url').value = payload.status_url;
-      log('ok', `Annex C session created: ${payload.session_id}`);
-      log('ok', `DeviceRequest payload: ${deviceRequestBytes.length} bytes`);
-      document.getElementById('qr-box').innerHTML = '<div class="placeholder">Annex C web presentment<br>does not use a QR code</div>';
-      document.getElementById('uri-display').textContent = requestJson;
-      document.getElementById('mdoc-uri-panel').style.display = 'block';
-      document.getElementById('download-qr-btn').style.display = 'none';
-      document.getElementById('copy-uri-btn').style.display = 'inline-flex';
-      document.getElementById('launch-dcapi-btn').style.display = 'inline-flex';
-      document.getElementById('launch-dcapi-btn').textContent = 'Launch Digital Credential';
-      renderRequestSummary({
-        docType: payload.doc_type,
-        requestUrl: payload.response_url,
-        verifierId,
-        requestedNamespaces,
-        reEngSize: 0,
-        itemsReqSize: deviceRequestBytes.length,
-        readerAuthSize: 0,
-        mode: 'annex_c',
-        expiresAt: payload.expires_at,
-        notes: payload.notes || [],
-      });
-      updateSessionTable({
-        protocol: 'Digital Credentials API / Annex C',
-        docType: payload.doc_type,
-        'response url': payload.response_url,
-        'status url': payload.status_url,
-        verifierId,
-        'recipient pub key (x962)': payload.recipient_public_key_hex.slice(0, 32) + '…',
-        'session id': payload.session_id,
-        'request nonce': payload.request_nonce_hex,
-      });
-      startSessionPolling(payload.session_id, 'annex_c');
-      if (isSafariBrowser()) {
-        setWalletResponseState(
-          'waiting',
-          'Annex C request is ready. Click the button below to open the browser presentment flow.',
-          '<button class="btn primary" type="button" onclick="launchStoredAnnexCRequest()">Launch Digital Credential</button>'
-        );
-        log('info', 'Safari detected; waiting for explicit user gesture before presentment launch');
-      } else {
-        setWalletResponseState('waiting', 'Annex C request is ready. Launching the browser Digital Credentials flow.');
-        log('info', 'Annex C request ready; attempting immediate presentment launch');
-        try {
-          await triggerAnnexCPresentation(payload.request);
-        } catch (_err) {
-          log('warn', 'Immediate Annex C launch failed; manual retry remains available');
-        }
-      }
-    } else {
-      const requestUrl = payload.request_url;
-      const mdocUri = payload.mdoc_uri;
-      const reEngBytes = Uint8Array.from((payload.reader_engagement_hex.match(/.{2}/g) || []).map(h => parseInt(h, 16)));
-
-      state.readerEngagementBytes = reEngBytes;
-      state.mdocUri = mdocUri;
-      state.transportValue = mdocUri;
-      document.getElementById('request-url').value = requestUrl;
-      document.getElementById('endpoint-bar-url').value = requestUrl;
-      log('ok', `Session created: ${payload.session_id}`);
-      log('ok', `ReaderEngagement encoded: ${reEngBytes.length} bytes`);
-      log('ok', `mdoc:// URI: ${mdocUri.length} chars`);
-
-      renderQR(mdocUri);
-      document.getElementById('uri-display').textContent = mdocUri;
-      document.getElementById('mdoc-uri-panel').style.display = 'block';
-      document.getElementById('open-deeplink').href = mdocUri;
-      document.getElementById('download-qr-btn').style.display = 'inline-flex';
-      document.getElementById('copy-uri-btn').style.display = 'inline-flex';
-
-      renderRequestSummary({
-        docType, requestUrl, verifierId,
-        requestedNamespaces,
-        reEngSize: reEngBytes.length,
-        itemsReqSize: 0,
-        readerAuthSize: 0,
-        mode: 'mdoc',
-      });
-
-      updateSessionTable({
-        docType, requestUrl, verifierId,
-        'reader pub key (x962)': payload.reader_public_key_hex.slice(0, 32) + '…',
-        'session id': payload.session_id,
-        'readerEngagement size': reEngBytes.length + ' bytes',
-        'backend flow': 'server-owned session',
-      });
-      startSessionPolling(payload.session_id, 'mdoc');
-    }
-
-    setStatus('request ready', '#3fb950');
-    log('ok', 'DeviceRequest generation complete ✓');
-
-  } catch (err) {
-    log('err', `Error: ${err.message}`);
-    setStatus('error', '#f85149');
-    console.error(err);
-  }
-
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 2h-1A.5.5 0 0 0 2 2.5v1A.5.5 0 0 0 2.5 4h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 2.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 2zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 7h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 3.5 7zm5 0h-1A.5.5 0 0 0 7 7.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1A.5.5 0 0 0 8.5 7zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zM3.5 12h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1A.5.5 0 0 0 7 12.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm5 0h-1a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5z"/></svg>${state.activeProtocol === 'annex_c' ? ' Generate Annex C Request' : ' Generate DeviceRequest'}`;
-  btn.disabled = false;
-}
-
-// ════════════════════════════════════════════════════════════
-// QR code
-// ════════════════════════════════════════════════════════════
-function renderQR(uri) {
-  const box = document.getElementById('qr-box');
-  box.innerHTML = '';
-  const size = Math.min(280, box.parentElement.offsetWidth - 64);
-  qrInstance = new QRCode(box, {
-    text: uri,
-    width: size || 240,
-    height: size || 240,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.M,
-  });
-}
-
-function downloadQR() {
-  const canvas = document.querySelector('#qr-box canvas');
-  if (!canvas) return;
-  const a = document.createElement('a');
-  a.download = 'mdoc-request-qr.png';
-  a.href = canvas.toDataURL('image/png');
-  a.click();
-}
-
-function openDeeplink(e) {
-  if (!state.mdocUri) { e.preventDefault(); return; }
-}
-
-// ════════════════════════════════════════════════════════════
-// Request summary renderer
-// ════════════════════════════════════════════════════════════
-function renderRequestSummary({ docType, requestUrl, verifierId, requestedNamespaces, reEngSize, itemsReqSize, readerAuthSize, mode = 'mdoc', expiresAt = null, notes = [] }) {
-  const el = document.getElementById('request-summary');
-  el.innerHTML = `
-    <table class="field-table">
-      <tr><td>mode</td><td colspan="2">${mode === 'annex_c' ? 'Digital Credentials API / Annex C' : 'URI scheme / QR'}</td></tr>
-      <tr><td>docType</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px;color:var(--accent)">${docType}</code></td></tr>
-      <tr><td>${mode === 'annex_c' ? 'response_url' : 'request_url'}</td><td colspan="2" style="word-break:break-all">${requestUrl}</td></tr>
-      <tr><td>verifier ID</td><td colspan="2">${escHtml(verifierId)}</td></tr>
-      ${requestedNamespaces.map(({ name, elements }) => `
-        <tr><td>namespace</td><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${escHtml(name)}</code></td></tr>
-        <tr><td>elements requested</td><td colspan="2">${elements.map(e => `<span class="badge info" style="margin:1px">${escHtml(e)}</span>`).join('')}</td></tr>
-      `).join('')}
-      <tr><td>ReaderEngagement</td><td colspan="2">${reEngSize} bytes</td></tr>
-      <tr><td>${mode === 'annex_c' ? 'DeviceRequest' : 'ItemsRequest'}</td><td colspan="2">${itemsReqSize} bytes</td></tr>
-      <tr><td>COSE_Sign1</td><td colspan="2">${readerAuthSize} bytes</td></tr>
-      ${expiresAt ? `<tr><td>expires</td><td colspan="2">${escHtml(new Date(expiresAt * 1000).toLocaleString())}</td></tr>` : ''}
-      ${notes.map(note => `<tr><td>note</td><td colspan="2">${escHtml(note)}</td></tr>`).join('')}
-    </table>`;
-}
-
-// ════════════════════════════════════════════════════════════
-// CBOR Inspector
-// ════════════════════════════════════════════════════════════
-function loadCurrentRequest() {
-  if (!state.readerEngagementBytes) {
-    log('warn', 'No request generated yet'); return;
-  }
-  const hex = Array.from(state.readerEngagementBytes).map(b => b.toString(16).padStart(2,'0')).join('');
-  document.getElementById('cbor-input').value = hex;
-  decodeCbor();
-  switchTab('cbor');
-}
-
-function clearCbor() {
-  document.getElementById('cbor-input').value = '';
-  document.getElementById('cbor-tree').innerHTML = '<span style="color:var(--text3)">—</span>';
-  document.getElementById('cbor-json-out').value = '';
-  document.getElementById('hex-dump-output').textContent = '—';
-}
-
-function parseInputBytes(raw) {
-  raw = raw.trim().replace(/\s+/g,'');
-  // Try hex first
-  if (/^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0) {
-    return Uint8Array.from(raw.match(/.{2}/g).map(h => parseInt(h, 16)));
-  }
-  // Try base64 / base64url
-  try {
-    const b64 = raw.replace(/-/g,'+').replace(/_/g,'/');
-    const bin = atob(b64);
-    return Uint8Array.from(bin.split('').map(c => c.charCodeAt(0)));
-  } catch(e) {}
-  throw new Error('Cannot parse input as hex or base64');
-}
-
-function decodeCbor() {
-  const raw = document.getElementById('cbor-input').value;
-  if (!raw.trim()) return;
-  try {
-    const bytes = parseInputBytes(raw);
-    const decoded = CBOR.decode(bytes);
-    document.getElementById('cbor-tree').innerHTML = renderCborTree(decoded);
-    document.getElementById('cbor-json-out').value = JSON.stringify(cborToJson(decoded), null, 2);
-    document.getElementById('hex-dump-output').textContent = hexDump(bytes);
-    log('ok', `CBOR decoded: ${bytes.length} bytes`);
-  } catch(e) {
-    log('err', `CBOR decode error: ${e.message}`);
-    document.getElementById('cbor-tree').innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
-  }
-}
-
-function encodeCborFromJson() {
-  const json = document.getElementById('cbor-json-out').value;
-  try {
-    const obj = JSON.parse(json);
-    const bytes = CBOR.encode(obj);
-    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
-    document.getElementById('cbor-input').value = hex;
-    document.getElementById('hex-dump-output').textContent = hexDump(bytes);
-    log('ok', `JSON encoded to CBOR: ${bytes.length} bytes`);
-  } catch(e) {
-    log('err', `Encode error: ${e.message}`);
-  }
-}
-
-function renderCborTree(val, indent = 0) {
-  const pad = indent > 0 ? `<div class="cbor-indent">` : '';
-  const close = indent > 0 ? `</div>` : '';
-  if (val === null) return `<span class="cbor-bool">null</span>`;
-  if (val === undefined) return `<span class="cbor-bool">undefined</span>`;
-  if (typeof val === 'boolean') return `<span class="cbor-bool">${val}</span>`;
-  if (typeof val === 'number') return `<span class="cbor-num">${val}</span>`;
-  if (typeof val === 'bigint') return `<span class="cbor-num">${val}n</span>`;
-  if (typeof val === 'string') return `<span class="cbor-str">"${escHtml(val)}"</span>`;
-  if (val instanceof Uint8Array) {
-    const hex = Array.from(val).map(b=>b.toString(16).padStart(2,'0')).join('');
-    const preview = hex.length > 32 ? hex.slice(0,32)+'…' : hex;
-    return `<span class="cbor-bytes">h'${preview}' <span class="cbor-tag">(${val.length}B)</span></span>`;
-  }
-  if (val && '_tag' in val) {
-    return `<span class="cbor-tag">tag(${val._tag})</span> ${renderCborTree(val._val, indent)}`;
-  }
-  if (Array.isArray(val)) {
-    if (val.length === 0) return '[]';
-    return `[${pad}${val.map((v,i) => renderCborTree(v, indent+1)).join('<br>')}${close}]`;
-  }
-  if (val instanceof Map) {
-    if (val.size === 0) return '{}';
-    let rows = '';
-    val.forEach((v, k) => {
-      rows += `<span class="cbor-key">${typeof k === 'string' ? `"${escHtml(k)}"` : k}</span>: ${renderCborTree(v, indent+1)}<br>`;
-    });
-    return `{${pad}${rows}${close}}`;
-  }
-  if (typeof val === 'object') {
-    const keys = Object.keys(val);
-    if (!keys.length) return '{}';
-    let rows = '';
-    keys.forEach(k => {
-      rows += `<span class="cbor-key">"${escHtml(k)}"</span>: ${renderCborTree(val[k], indent+1)}<br>`;
-    });
-    return `{${pad}${rows}${close}}`;
-  }
-  return String(val);
-}
-
-function cborToJson(val) {
-  if (val === null || val === undefined || typeof val === 'boolean' || typeof val === 'number' || typeof val === 'string') return val;
-  if (typeof val === 'bigint') return Number(val);
-  if (val instanceof Uint8Array) return Array.from(val).map(b=>b.toString(16).padStart(2,'0')).join('');
-  if (val && '_tag' in val) return { '__cbor_tag': val._tag, value: cborToJson(val._val) };
-  if (Array.isArray(val)) return val.map(cborToJson);
-  if (val instanceof Map) {
-    const out = {};
-    val.forEach((v, k) => { out[typeof k === 'number' ? k : String(k)] = cborToJson(v); });
-    return out;
-  }
-  if (typeof val === 'object') {
-    const out = {};
-    Object.keys(val).forEach(k => { out[k] = cborToJson(val[k]); });
-    return out;
-  }
-  return val;
-}
-
-function hexDump(bytes) {
-  let out = '';
-  for (let i = 0; i < bytes.length; i += 16) {
-    const chunk = bytes.slice(i, i+16);
-    const addr = i.toString(16).padStart(8,'0');
-    const hex = Array.from(chunk).map(b=>b.toString(16).padStart(2,'0')).join(' ').padEnd(47);
-    const ascii = Array.from(chunk).map(b => b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.').join('');
-    out += `${addr}  ${hex}  ${ascii}\n`;
-  }
-  return out;
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function safeJsonStringify(value) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch (_err) {
-    return String(value);
-  }
-}
-
-function hexToBase64(hex) {
-  const pairs = hex.match(/.{1,2}/g) || [];
-  let binary = '';
-  pairs.forEach(pair => {
-    binary += String.fromCharCode(parseInt(pair, 16));
-  });
-  return btoa(binary);
-}
-
-function base64UrlToBytes(raw) {
-  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
-  const bin = atob(padded);
-  return Uint8Array.from(bin.split('').map(c => c.charCodeAt(0)));
-}
-
-function detectImageMimeFromHex(hex) {
-  const normalized = (hex || '').toLowerCase();
-  if (normalized.startsWith('89504e470d0a1a0a')) return 'image/png';
-  if (normalized.startsWith('ffd8ff')) return 'image/jpeg';
-  if (normalized.startsWith('47494638')) return 'image/gif';
-  if (normalized.startsWith('52494646') && normalized.slice(16, 24) === '57454250') return 'image/webp';
-  return null;
-}
-
-function renderSharedAttributeValue(name, value) {
-  if (value && typeof value === 'object' && value.type === 'bytes' && typeof value.hex === 'string') {
-    const mime = detectImageMimeFromHex(value.hex);
-    const looksLikePortrait = /portrait|image|photo/i.test(name);
-    if (mime && looksLikePortrait) {
-      const src = `data:${mime};base64,${hexToBase64(value.hex)}`;
-      return `
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <img src="${src}" alt="${escHtml(name)}" style="max-width:180px;max-height:220px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);object-fit:contain">
-        </div>
-      `;
-    }
-  }
-  return `<div style="font-family:var(--mono);font-size:11px;word-break:break-word">${escHtml(JSON.stringify(value))}</div>`;
-}
-
-function renderSharedAttributes(sharedAttributes) {
-  const namespaces = Object.entries(sharedAttributes || {}).filter(([, values]) => Object.keys(values || {}).length);
-  if (!namespaces.length) return '';
-
-  return `
-    <div class="gap-sm">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Shared attributes</div>
-      <table class="field-table">
-        ${namespaces.map(([namespace, values]) => `
-          <tr><td colspan="2"><code style="font-family:var(--mono);font-size:11px">${escHtml(namespace)}</code></td></tr>
-          ${Object.entries(values).map(([name, value]) => `
-            <tr>
-              <td>${escHtml(name)}</td>
-              <td>${renderSharedAttributeValue(name, value)}</td>
-            </tr>
-          `).join('')}
-        `).join('')}
-      </table>
-    </div>
-  `;
-}
-
-function decodeSharedAttributesFromResponseHex(responseHex) {
-  if (!responseHex || typeof responseHex !== 'string') return {};
-  try {
-    const bytes = fromHex(responseHex);
-    const decoded = CBOR.decode(bytes);
-    const deviceResponse = findDeviceResponseNode(decoded);
-    const documents = getField(deviceResponse, 'documents');
-    const documentList = Array.isArray(documents) ? documents : [];
-    const out = {};
-
-    documentList.forEach(document => {
-      const issuerSigned = getField(document, 'issuerSigned');
-      const nameSpaces = getField(issuerSigned, 'nameSpaces');
-      if (!nameSpaces || typeof nameSpaces !== 'object') return;
-
-      const entries = nameSpaces instanceof Map ? Array.from(nameSpaces.entries()) : Object.entries(nameSpaces);
-      entries.forEach(([namespace, items]) => {
-        if (!Array.isArray(items)) return;
-        if (!out[namespace]) out[namespace] = {};
-        items.forEach(item => {
-          const decodedItem = decodeIssuerSignedItem(item);
-          const identifier = getField(decodedItem, 'elementIdentifier');
-          const elementValue = getField(decodedItem, 'elementValue');
-          if (typeof identifier === 'string') {
-            out[namespace][identifier] = cborToJson(elementValue);
-          }
-        });
-      });
-    });
-
-    return out;
-  } catch (_err) {
-    return {};
-  }
-}
-
-function decodeIssuerSignedItem(item) {
-  let decoded = item;
-  if (decoded && typeof decoded === 'object' && decoded._tag === 24 && decoded._val instanceof Uint8Array) {
-    decoded = CBOR.decode(decoded._val);
-  } else if (decoded instanceof Uint8Array) {
-    decoded = CBOR.decode(decoded);
-  }
-  return decoded && typeof decoded === 'object' ? decoded : null;
-}
-
-function findDeviceResponseNode(value, depth = 8) {
-  if (depth < 0 || value === null || value === undefined) return null;
-
-  let decoded = value;
-  try {
-    if (decoded && typeof decoded === 'object' && decoded._tag === 24 && decoded._val instanceof Uint8Array) {
-      decoded = CBOR.decode(decoded._val);
-    } else if (decoded instanceof Uint8Array) {
-      decoded = CBOR.decode(decoded);
-    }
-  } catch (_err) {}
-
-  if (decoded && typeof decoded === 'object') {
-    const documents = getField(decoded, 'documents');
-    if (Array.isArray(documents)) return decoded;
-
-    const wrappedKeys = ['deviceResponseBytes', 'deviceResponse', 'response', 'payload', 'data'];
-    for (const key of wrappedKeys) {
-      if (Object.prototype.hasOwnProperty.call(decoded, key)) {
-        const found = findDeviceResponseNode(decoded[key], depth - 1);
-        if (found) return found;
-      }
-    }
-
-    if (decoded instanceof Map) {
-      for (const nested of decoded.values()) {
-        const found = findDeviceResponseNode(nested, depth - 1);
-        if (found) return found;
-      }
-      return null;
-    }
-
-    for (const nested of Object.values(decoded)) {
-      const found = findDeviceResponseNode(nested, depth - 1);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  if (Array.isArray(decoded)) {
-    for (const nested of decoded) {
-      const found = findDeviceResponseNode(nested, depth - 1);
-      if (found) return found;
-    }
-  }
-
-  return null;
-}
-
-function getField(container, key) {
-  if (!container || typeof container !== 'object') return undefined;
-  if (container instanceof Map) return container.get(key);
-  return container[key];
-}
-
-function buildWalletResponseExtra(mode, data) {
-  const sharedAttributes = (data.shared_attributes && Object.keys(data.shared_attributes).length)
-    ? data.shared_attributes
-    : decodeSharedAttributesFromResponseHex(data.response_hex);
-  const sharedAttributesHtml = renderSharedAttributes(sharedAttributes);
-  const transportStatus = data.validation && typeof data.validation.transport === 'string'
-    ? data.validation.transport
-    : '';
-  const preview = data.response_hex
-    ? `<div class="uri-display" style="font-size:11px">response hex: ${escHtml(data.response_hex.slice(0, 160))}${data.response_hex.length > 160 ? '…' : ''}</div>`
-    : '';
-  const validation = data.validation
-    ? `<div class="gap-sm"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Validation</div><table class="field-table">${Object.entries(data.validation).map(([name, value]) => `<tr><td>${escHtml(name)}</td><td>${escHtml(String(value))}</td></tr>`).join('')}</table></div>`
-    : '';
-
-  if (mode !== 'annex_c') {
-    return {
-      extra: sharedAttributesHtml,
-      transportStatus,
-    };
-  }
-
-  if (sharedAttributesHtml) {
-    return {
-      extra: `${sharedAttributesHtml}${validation}${transportStatus === 'decrypted' ? '' : preview}`,
-      transportStatus,
-    };
-  }
-
-  return {
-    extra: `${validation}${preview}`,
-    transportStatus,
-  };
-}
-
-function setWalletResponseState(kind, message, extraHtml='') {
-  const badge = document.getElementById('wallet-response-badge');
-  const panel = document.getElementById('wallet-response-panel');
-  const styles = {
-    idle: ['badge info', 'idle'],
-    waiting: ['badge warn', 'waiting'],
-    connected: ['badge info', 'wallet connected'],
-    received: ['badge ok', 'response received'],
-    done: ['badge ok', 'completed'],
-    error: ['badge err', 'error'],
-  };
-  const [cls, label] = styles[kind] || styles.idle;
-  badge.className = cls;
-  badge.textContent = label;
-  panel.innerHTML = `
-    <div class="gap-sm">
-      <div style="font-size:13px;color:var(--text)">${escHtml(message)}</div>
-      ${extraHtml}
-    </div>
-  `;
-}
-
-function stopSessionPolling() {
-  if (state.sessionStatusTimer) {
-    clearInterval(state.sessionStatusTimer);
-    state.sessionStatusTimer = null;
-  }
-}
-
-async function pollSessionStatus(mode = 'mdoc') {
-  if (!state.sessionId) return;
-  try {
-    const res = await fetch(mode === 'annex_c' ? `/dc/session/${state.sessionId}` : `/mdoc/session/${state.sessionId}`);
-    if (!res.ok) throw new Error(`status ${res.status}`);
-    const data = await res.json();
-
-    if (data.response_received) {
-      if (mode === 'annex_c') {
-        updateAnnexCDebug({
-          session: {
-            ...(state.annexCDebug && state.annexCDebug.session ? state.annexCDebug.session : {}),
-            backendValidation: data.validation || null,
-            backendLastError: data.last_error || null,
-          },
-          lastResult: {
-            stage: 'backend_status_response_received',
-            responseReceived: data.response_received,
-            responsePreview: data.response_preview || null,
-            sharedAttributes: data.shared_attributes || {},
-          },
-        }, data.validation && data.validation.transport === 'decrypted' ? 'decrypted' : 'backend_received');
-      }
-      const { extra, transportStatus } = buildWalletResponseExtra(mode, data);
-      setWalletResponseState('received', mode === 'annex_c'
-        ? (transportStatus === 'decrypted'
-          ? 'The verifier received and decrypted a Digital Credentials API response. Shared attributes are shown below.'
-          : 'The verifier received a Digital Credentials API response and stored the encrypted payload for inspection.')
-        : 'The wallet sent a follow-up encrypted response to the verifier.', extra);
-      log('ok', mode === 'annex_c' ? 'Annex C response received by backend' : 'Wallet response received by backend');
-      if (mode === 'annex_c' || data.stage >= 2) {
-        setWalletResponseState('done', mode === 'annex_c'
-          ? (transportStatus === 'decrypted'
-            ? 'Session completed. The verifier decrypted the Annex C response and extracted the shared PhotoID fields.'
-            : 'Session completed. The verifier received the Annex C response, but this demo backend could not decrypt the standards-formatted encrypted payload yet.')
-          : 'Session completed. The verifier received the wallet response and sent the protocol termination acknowledgement.', extra);
-        stopSessionPolling();
-      }
-    } else if (mode !== 'annex_c' && data.stage === 1) {
-      setWalletResponseState('connected', 'The wallet accepted the QR and the verifier sent the encrypted DeviceRequest. Waiting for a follow-up response.');
-    } else {
-      setWalletResponseState('waiting', mode === 'annex_c'
-        ? 'Waiting for a Digital Credentials API response to be posted to the verifier.'
-        : 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
-    }
-  } catch (e) {
-    setWalletResponseState('error', `Could not fetch session status: ${e.message}`);
-  }
-}
-
-function startSessionPolling(sessionId, mode = 'mdoc') {
-  stopSessionPolling();
-  state.sessionId = sessionId;
-  setWalletResponseState('waiting', mode === 'annex_c'
-    ? 'Waiting for a Digital Credentials API response to be posted to the verifier.'
-    : 'Waiting for the wallet to scan the QR code and contact the verifier endpoint.');
-  pollSessionStatus(mode);
-  state.sessionStatusTimer = setInterval(() => pollSessionStatus(mode), 2000);
-}
-
-// ════════════════════════════════════════════════════════════
-// Endpoint bar
-// ════════════════════════════════════════════════════════════
-function syncEndpointUrl(val) {
-  document.getElementById('request-url').value = val;
-  document.getElementById('endpoint-status').textContent = 'not tested';
-  document.getElementById('endpoint-status').style.color = 'var(--text3)';
-}
-
-async function testEndpoint() {
-  const url = document.getElementById('endpoint-bar-url').value.trim();
-  if (!url) return;
-  const statusEl = document.getElementById('endpoint-status');
-  const btn = document.getElementById('test-endpoint-btn');
-  btn.textContent = 'Testing…'; btn.disabled = true;
-  statusEl.textContent = '…'; statusEl.style.color = 'var(--text3)';
-  log('info', `GET ${url}`);
-  try {
-    const res = await fetch(url, { method: 'GET', mode: 'cors', signal: AbortSignal.timeout(5000) });
-    const label = `${res.status} ${res.statusText || 'OK'}`;
-    const ok = res.status < 400;
-    statusEl.textContent = label;
-    statusEl.style.color = ok ? 'var(--green)' : 'var(--amber)';
-    log(ok ? 'ok' : 'warn', `Endpoint responded: ${label}`);
-  } catch(e) {
-    const msg = e.name === 'AbortError' ? 'timeout' : e.message.includes('NetworkError') || e.message.includes('Failed to fetch') ? 'unreachable / CORS' : e.message;
-    statusEl.textContent = msg;
-    statusEl.style.color = 'var(--red)';
-    log('err', `Endpoint test failed: ${msg}`);
-  }
-  btn.textContent = 'Test ↗'; btn.disabled = false;
-}
-
-// ════════════════════════════════════════════════════════════
-// URI copy
-// ════════════════════════════════════════════════════════════
-async function copyCurrentTransportValue() {
-  if (!state.transportValue) return;
-  await navigator.clipboard.writeText(state.transportValue);
-  log('ok', state.activeProtocol === 'annex_c'
-    ? 'Annex C request JSON copied to clipboard'
-    : 'mdoc:// URI copied to clipboard');
-}
-
-// ════════════════════════════════════════════════════════════
-// Tabs
-// ════════════════════════════════════════════════════════════
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => {
-    const names = ['qr','cbor','log'];
-    t.classList.toggle('active', names[i] === name);
-  });
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-}
-
-// ════════════════════════════════════════════════════════════
-// Log
-// ════════════════════════════════════════════════════════════
-function log(level, msg) {
-  const panel = document.getElementById('log-panel');
-  const ts = new Date().toISOString().slice(11,23);
-  const line = document.createElement('div');
-  line.className = `log-line ${level}`;
-  line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${escHtml(msg)}</span>`;
-  panel.appendChild(line);
-  panel.scrollTop = panel.scrollHeight;
-}
-
-function clearLog() { document.getElementById('log-panel').innerHTML = ''; }
-
-// ════════════════════════════════════════════════════════════
-// Session table
-// ════════════════════════════════════════════════════════════
-function updateSessionTable(data) {
-  const tbody = document.getElementById('session-tbody');
-  if (!data) { tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text3)">No session yet</td></tr>'; return; }
-  tbody.innerHTML = Object.entries(data).map(([k,v]) =>
-    `<tr><td>${escHtml(k)}</td><td style="font-family:var(--mono);font-size:11px;word-break:break-all">${escHtml(String(v))}</td></tr>`
-  ).join('');
-}
-
-// ════════════════════════════════════════════════════════════
-// Status indicator
-// ════════════════════════════════════════════════════════════
-function setStatus(label, color) {
-  document.getElementById('status-label').textContent = label;
-  document.getElementById('status-dot').style.background = color;
-  document.getElementById('status-dot').style.boxShadow = `0 0 6px ${color}`;
-}
-
-// ════════════════════════════════════════════════════════════
-// Boot
-// ════════════════════════════════════════════════════════════
-init();
-updateSessionTable(null);
-</script>
+<script src="/static/verifier.js" defer></script>
 </body>
 </html>
