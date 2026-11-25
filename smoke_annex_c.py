@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from pyhpke import AEADId, CipherSuite, KDFId, KEMId, KEMKey
 
 from mdoc_verifier.annex_c import decrypt_envelope, session_transcript
-from mdoc_verifier.iso_session import PHOTO_ID_DOCTYPE, PHOTO_ID_NAMESPACE, build_cose_key
+from mdoc_verifier.iso_session import MDL_DOCTYPE, MDL_NAMESPACE, PHOTO_ID_DOCTYPE, PHOTO_ID_NAMESPACE, build_cose_key
 from server.main import app
 
 ORIGIN = "https://verifier.example"
@@ -49,7 +49,7 @@ def demo_issuer(directory: str):
     leaf_name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Test document signer")])
 
     def issue(name, key, is_ca):
-        return (
+        builder = (
             x509.CertificateBuilder().subject_name(name).issuer_name(ca_name).public_key(key.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(now - timedelta(days=1)).not_valid_after(now + timedelta(days=1))
@@ -57,8 +57,12 @@ def demo_issuer(directory: str):
             .add_extension(x509.KeyUsage(
                 digital_signature=not is_ca, key_cert_sign=is_ca, crl_sign=is_ca, **KEY_USAGE
             ), critical=True)
-            .sign(ca_key, hashes.SHA256())
         )
+        if not is_ca:
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage([x509.ObjectIdentifier("1.0.18013.5.1.2")]), critical=True
+            )
+        return builder.sign(ca_key, hashes.SHA256())
 
     root = issue(ca_name, ca_key, True)
     leaf = issue(leaf_name, leaf_key, False)
@@ -67,8 +71,10 @@ def demo_issuer(directory: str):
     return leaf_key, leaf, str(root_file)
 
 
-def device_response(issuer, transcript: list, device_key=None, *, claim: str = "Doe") -> bytes:
+def device_response(issuer, transcript: list, device_key=None, *,
+                    claim: str = "Doe", doc_type: str = PHOTO_ID_DOCTYPE) -> bytes:
     issuer_key, certificate, _ = issuer
+    namespace = MDL_NAMESPACE if doc_type == MDL_DOCTYPE else PHOTO_ID_NAMESPACE
     now = datetime.now(timezone.utc)
     device = device_key or ec.generate_private_key(ec.SECP256R1())
     digest_item = wrapped({"digestID": 0, "random": b"\x01" * 16,
@@ -77,9 +83,9 @@ def device_response(issuer, transcript: list, device_key=None, *, claim: str = "
                            "elementIdentifier": "family_name", "elementValue": claim})
     mso = wrapped({
         "version": "1.0",
-        "docType": PHOTO_ID_DOCTYPE,
+        "docType": doc_type,
         "digestAlgorithm": "SHA-256",
-        "valueDigests": {PHOTO_ID_NAMESPACE: {0: hashlib.sha256(cbor2.dumps(digest_item)).digest()}},
+        "valueDigests": {namespace: {0: hashlib.sha256(cbor2.dumps(digest_item)).digest()}},
         "deviceKeyInfo": {"deviceKey": build_cose_key(device.public_key())},
         "validityInfo": {
             "signed": now - timedelta(hours=2), "validFrom": now - timedelta(hours=1),
@@ -87,12 +93,12 @@ def device_response(issuer, transcript: list, device_key=None, *, claim: str = "
         },
     })
     namespaces = wrapped({})
-    proof = wrapped(["DeviceAuthentication", transcript, PHOTO_ID_DOCTYPE, namespaces])
+    proof = wrapped(["DeviceAuthentication", transcript, doc_type, namespaces])
     return cbor2.dumps({
         "version": "1.0", "status": 0, "documents": [{
-            "docType": PHOTO_ID_DOCTYPE,
+            "docType": doc_type,
             "issuerSigned": {
-                "nameSpaces": {PHOTO_ID_NAMESPACE: [signed_item]},
+                "nameSpaces": {namespace: [signed_item]},
                 "issuerAuth": sign(issuer_key, cbor2.dumps(mso),
                                    {33: certificate.public_bytes(serialization.Encoding.DER)}, attached=True),
             },

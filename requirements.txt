@@ -8,6 +8,7 @@ cryptography==50.0.2
 fastapi==0.165.0
 h11==0.16.0
 idna==3.20
+jwcrypto==1.6.1
 opentelemetry-api==1.45.2
 pycparser==3.12
 pydantic==2.14.4

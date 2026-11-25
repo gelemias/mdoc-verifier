@@ -21,11 +21,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.datastructures import Headers, MutableHeaders
 
-from mdoc_verifier.annex_c import PROTOCOL, AnnexCSessionConfig, ReaderIdentity, new_annex_c_session
+from mdoc_verifier.annex_c import (
+    PROTOCOL as ANNEX_C_PROTOCOL, AnnexCSessionConfig, AnnexCSessionState, ReaderIdentity, new_annex_c_session,
+)
 from mdoc_verifier.iso_session import (
     MDL_DOCTYPE, PHOTO_ID_DOCTYPE, SessionConfig, build_mdoc_uri, export_public_key_hex,
     generate_session_id, new_session_state,
 )
+from mdoc_verifier.openid4vp import PROTOCOL as OPENID4VP_PROTOCOL, new_openid4vp_session
 from mdoc_verifier.validation import IssuerTrust
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -185,12 +188,16 @@ class SessionCreateRequest(BaseModel):
     custom_namespace_attributes: ClaimList = Field(default_factory=list)
 
 
-class AnnexCSessionCreateRequest(SessionCreateRequest):
+DCProtocol = Literal[ANNEX_C_PROTOCOL, OPENID4VP_PROTOCOL]
+
+
+class DigitalSessionCreateRequest(SessionCreateRequest):
     doc_type: Literal[PHOTO_ID_DOCTYPE, MDL_DOCTYPE] = PHOTO_ID_DOCTYPE
+    protocol: DCProtocol = ANNEX_C_PROTOCOL
 
 
-class AnnexCSubmitRequest(BaseModel):
-    protocol: Literal[PROTOCOL] | None = None
+class DigitalSubmitRequest(BaseModel):
+    protocol: DCProtocol | None = None
     response: str | None = Field(default=None, max_length=MAX_BODY)
     data: dict[str, str] | None = None
 
@@ -199,7 +206,7 @@ class AnnexCSubmitRequest(BaseModel):
             return self.response
         if self.response is None and self.data and self.data.keys() == {"response"} and self.data["response"]:
             return self.data["response"]
-        raise ValueError("Expected the Annex C response in data.response")
+        raise ValueError("Expected a Digital Credentials response in data.response")
 
 
 def request_origin(request: Request) -> str:
@@ -280,14 +287,15 @@ async def create_session(config: SessionCreateRequest, request: Request):
 
 
 @app.post("/dc/session")
-async def create_annex_c_session(config: AnnexCSessionCreateRequest, request: Request):
+async def create_digital_session(config: DigitalSessionCreateRequest, request: Request):
     origin = request_origin(request)
     ensure_capacity(request)
+    session_config = AnnexCSessionConfig(**config.model_dump(exclude={"include_mdl", "protocol"}))
     try:
-        state = new_annex_c_session(
-            AnnexCSessionConfig(**config.model_dump(exclude={"include_mdl"})),
-            origin, request.app.state.reader_identity,
-        )
+        if config.protocol == OPENID4VP_PROTOCOL:
+            state = new_openid4vp_session(session_config, origin)
+        else:
+            state = new_annex_c_session(session_config, origin, request.app.state.reader_identity)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     request.app.state.dc_sessions[state.session_id] = state
@@ -296,10 +304,13 @@ async def create_annex_c_session(config: AnnexCSessionCreateRequest, request: Re
         "access_token": state.access_token,
         "doc_type": state.config.doc_type,
         "response_url": f"{origin}{request.url_for('digital_credentials_response', session_id=state.session_id).path}",
-        "status_url": f"{origin}{request.url_for('annex_c_session_status', session_id=state.session_id).path}",
+        "status_url": f"{origin}{request.url_for('digital_session_status', session_id=state.session_id).path}",
         "expires_at": state.expires_at,
-        "request_nonce_hex": state.request_nonce.hex(),
-        "recipient_public_key_hex": export_public_key_hex(state.recipient_public_key),
+        "protocol": state.protocol,
+        **({
+            "request_nonce_hex": state.request_nonce.hex(),
+            "recipient_public_key_hex": export_public_key_hex(state.recipient_public_key),
+        } if isinstance(state, AnnexCSessionState) else {"request_nonce": state.nonce}),
         "request": state.request_object(),
         "validation": state.validation_status,
         "signed_request": state.signed_request,
@@ -308,12 +319,13 @@ async def create_annex_c_session(config: AnnexCSessionCreateRequest, request: Re
     }
 
 
-@app.get("/dc/session/{session_id}", name="annex_c_session_status")
-async def annex_c_session_status(session_id: str, request: Request):
+@app.get("/dc/session/{session_id}", name="digital_session_status")
+async def digital_session_status(session_id: str, request: Request):
     state = read_session(request, request.app.state.dc_sessions, session_id)
     return {
         "session_id": state.session_id,
         "doc_type": state.config.doc_type,
+        "protocol": state.protocol,
         "expires_at": state.expires_at,
         "response_received": state.completed,
         "shared_attributes": state.shared_attributes,
@@ -355,11 +367,13 @@ async def wallet_transfer(session_id: str, request: Request):
 
 
 @app.post("/dc/response/{session_id}", name="digital_credentials_response")
-async def digital_credentials_response(session_id: str, payload: AnnexCSubmitRequest, request: Request):
+async def digital_credentials_response(session_id: str, payload: DigitalSubmitRequest, request: Request):
     request_origin(request)
     state = read_session(request, request.app.state.dc_sessions, session_id)
     if state.completed:
         raise HTTPException(409, "Session already completed")
+    if (payload.protocol or ANNEX_C_PROTOCOL) != state.protocol:
+        raise HTTPException(422, "Response protocol does not match the session")
     try:
         state.handle_response(payload.response_value(), request.app.state.trust)
     except ValueError as exc:

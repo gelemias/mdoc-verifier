@@ -7,7 +7,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import cbor2
 from cryptography import x509
@@ -70,6 +70,13 @@ class AnnexCSessionConfig:
     custom_namespace: str = ""
     custom_namespace_attributes: list[str] = field(default_factory=list)
 
+    def requested_elements(self) -> dict[str, dict[str, bool]]:
+        return default_requested_elements(
+            self.doc_type, self.photoid_elements, self.mdl_elements, self.custom_attributes,
+            self.custom_photoid_attributes, self.custom_mdl_attributes, self.custom_namespace,
+            self.custom_namespace_attributes, False,
+        )
+
 
 def build_device_request(config: AnnexCSessionConfig, requested: dict[str, dict[str, bool]],
                          transcript: list, identity: ReaderIdentity | None) -> bytes:
@@ -112,6 +119,8 @@ def decrypt_envelope(response: str, recipient: ec.EllipticCurvePrivateKey, trans
 
 @dataclass
 class AnnexCSessionState:
+    protocol: ClassVar[str] = PROTOCOL
+
     session_id: str
     access_token: str
     config: AnnexCSessionConfig
@@ -158,11 +167,7 @@ def new_annex_c_session(config: AnnexCSessionConfig, origin: str,
     nonce = secrets.token_bytes(16)
     encryption_info = b64url(cbor2.dumps(["dcapi", {"nonce": nonce, "recipientPublicKey": build_cose_key(public_key)}]))
     transcript = session_transcript(encryption_info, origin)
-    requested = default_requested_elements(
-        config.doc_type, config.photoid_elements, config.mdl_elements, config.custom_attributes,
-        config.custom_photoid_attributes, config.custom_mdl_attributes, config.custom_namespace,
-        config.custom_namespace_attributes, False,
-    )
+    requested = config.requested_elements()
     if not requested:
         raise ValueError("Select at least one claim")
     return AnnexCSessionState(

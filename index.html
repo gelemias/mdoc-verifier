@@ -355,8 +355,8 @@
     padding: 10px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px;
   }
   .advanced-fields { border-top: 1px solid var(--border); padding: 12px; }
-  #annexc-debug-card > summary { min-height: 44px; font-family: var(--sans); }
-  #annexc-debug-card:not([open]) > summary { border-bottom: 0; }
+  #dc-debug-card > summary { min-height: 44px; font-family: var(--sans); }
+  #dc-debug-card:not([open]) > summary { border-bottom: 0; }
   #include-mdl-label { display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; min-height: 32px; }
   #include-mdl { accent-color: var(--accent); }
   .checkbox-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
@@ -413,7 +413,7 @@
   #presentment-card { order: 0; }
   #wallet-response-card { order: 1; }
   #request-summary-card { order: 2; }
-  #annexc-debug-card { order: 3; }
+  #dc-debug-card { order: 3; }
   .log-line .msg { overflow-wrap: anywhere; }
 
   @media (max-width: 820px) {
@@ -482,6 +482,7 @@
           <select id="protocol-mode">
             <option value="mdoc">QR / deep link</option>
             <option value="annex_c">Digital Credentials API (Annex C)</option>
+            <option value="openid4vp">Android / OpenID4VP</option>
           </select>
         </div>
         <div id="doc-type-wrap">
@@ -523,7 +524,7 @@
           <label for="request-url" id="request-url-label">Wallet transfer URL</label>
           <input type="url" id="request-url" placeholder="Generated with the request" readonly>
         </div>
-        <div>
+        <div id="verifier-id-row">
           <label for="verifier-id">Verifier ID</label>
           <input type="text" id="verifier-id" value="urn:example:verifier">
         </div>
@@ -574,7 +575,7 @@
               <strong>Ready to present</strong>
               <p>Select a credential from a wallet on this device.</p>
             </div>
-            <button class="btn primary" type="button" id="launch-dcapi-btn" data-action="launchStoredAnnexCRequest">
+            <button class="btn primary" type="button" id="launch-dcapi-btn" data-action="launchDigitalRequest">
               Open wallet
             </button>
           </div>
@@ -612,15 +613,15 @@
         </div>
       </div>
 
-      <details class="card" id="annexc-debug-card" hidden>
+      <details class="card" id="dc-debug-card" hidden>
         <summary class="card-header">
-          <h3>Annex C diagnostics</h3>
-          <span id="annexc-debug-badge" class="badge info">idle</span>
+          <h3>Digital Credentials diagnostics</h3>
+          <span id="dc-debug-badge" class="badge info">idle</span>
         </summary>
-        <div class="card-body" id="annexc-debug-panel">
+        <div class="card-body" id="dc-debug-panel">
           <div class="empty-state">
             <div class="icon">⌁</div>
-            <p>Generate an Annex C request to capture environment and request diagnostics</p>
+            <p>Generate a request to see browser and protocol diagnostics.</p>
           </div>
         </div>
       </details>

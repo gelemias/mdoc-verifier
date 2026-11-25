@@ -1,6 +1,6 @@
 # mdoc Verifier
 
-A FastAPI interoperability tool for requesting and inspecting mobile identity documents. It supports the Digital Credentials API using ISO/IEC TS 18013-7:2025 Annex C and QR/deep-link reverse engagement. The browser also includes a CBOR inspector and session activity view.
+A FastAPI interoperability tool for requesting and inspecting mobile identity documents. It supports ISO/IEC TS 18013-7:2025 Annex C and OpenID4VP 1.0 over the Digital Credentials API, plus QR/deep-link reverse engagement. The browser also includes a CBOR inspector and session activity view.
 
 ## Run locally
 
@@ -14,6 +14,12 @@ uvicorn server.main:app --no-access-log
 ```
 
 Open [localhost:8000](http://localhost:8000). Local session URLs use the loopback origin. The endpoint tester is shown on loopback hosts. A QR scanned on another device needs a reachable HTTPS deployment. Annex C needs a browser with Digital Credentials API support and a wallet that can present the requested document. Generate a request and then select **Open wallet** to launch the browser chooser.
+
+## Test an Android wallet
+
+On the Android device, open the HTTPS verifier page in Chrome and select **Android / OpenID4VP**. Choose PhotoID or mDL, select claims available on the test credential, generate the request, and tap **Open wallet**. The Android app must have registered its credentials with Credential Manager and accept the `openid4vp-v1-unsigned` protocol. Use an mdoc with all the selected claims.
+
+This mode targets [OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0-final.html) over the Digital Credentials API, the protocol documented for [draft Annex D](https://developers.google.com/wallet/identity/verify/faq). It requests one mdoc through DCQL, uses an unsigned request and an encrypted `dc_api.jwt` response with ECDH-ES and A128GCM, and binds the mdoc device signature to the origin, request nonce, and encryption key. [Google Wallet's sandbox](https://developers.google.com/wallet/identity/verify/test-your-integration) requires a separate signed-request integration.
 
 ## Configure verification and remote access
 
@@ -37,21 +43,22 @@ Run one worker behind HTTPS because sessions are held in process memory and expi
 | Endpoint | Use |
 | --- | --- |
 | `GET /health` | Health check |
-| `POST /dc/session` | Create a Digital Credentials request and return its request object, session ID, and access token |
-| `POST /dc/response/{session_id}` | Submit the browser's `org-iso-mdoc` credential with `Authorization: Bearer <access_token>`. The payload is `{"protocol":"org-iso-mdoc","data":{"response":"..."}}`. |
-| `GET /dc/session/{session_id}` | Get Annex C status, claims and their verification result with the access token |
+| `POST /dc/session` | Create a Digital Credentials request and return its request object, session ID, and access token. Set `protocol` to `openid4vp-v1-unsigned` for Android. The default is `org-iso-mdoc`. |
+| `POST /dc/response/{session_id}` | Submit the browser credential with `Authorization: Bearer <access_token>`. Send `{"protocol":"<session protocol>","data":{"response":"..."}}` with the matching protocol. |
+| `GET /dc/session/{session_id}` | Get Digital Credentials status, claims and their verification result with the access token |
 | `POST /mdoc/session` | Create a QR session and return the `mdoc://` URI, transfer URL, and access token |
 | `POST /mdoc/request/{session_id}` | Exchange wallet CBOR over the QR transfer URL |
 | `GET /mdoc/session/{session_id}` | Get QR status, claims and their verification result with the access token |
 
-An Annex C response that fails decryption or authentication returns an error and leaves the session available for another response. Successful responses close the session. The former demo `enc` / `cipherText` JSON submission and raw response and key fields are removed.
+A Digital Credentials response that fails decryption or authentication returns an error and leaves the session available for another response. Successful responses close the session. The former demo `enc` / `cipherText` JSON submission and raw response and key fields are removed.
 
 ## Checks
 
 ```sh
 python -m pip install httpx2==2.16.2
 python smoke_annex_c.py
+python smoke_openid4vp.py
 python smoke_iso_session.py
 ```
 
-The Annex C smoke test checks transcript and HPKE interoperability against an independently published synthetic vector and verifies a complete synthetic response under a local test CA. The QR smoke test exercises the encrypted transfer, claim validation, and termination. Neither test requires a real identity document.
+The Annex C smoke test checks transcript and HPKE interoperability against an independently published synthetic vector and verifies a complete synthetic response under a local test CA. The OpenID4VP smoke test checks the published transcript vector and processes an encrypted response produced independently by the test fixture. The QR smoke test exercises the encrypted transfer, claim validation, and termination. The tests require no real identity document.

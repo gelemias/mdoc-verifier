@@ -138,8 +138,8 @@ const state = {
   sessionStatusTimer: null,
   activeProtocol: 'mdoc',
   transportValue: null,
-  annexCDebug: null,
-  annexCAbort: null,
+  digitalDebug: null,
+  digitalAbort: null,
 };
 
 // ════════════════════════════════════════════════════════════
@@ -160,7 +160,7 @@ function init() {
 
   const actions = {
     clearCbor, clearLog, copyCurrentTransportValue, decodeCbor, downloadQR,
-    encodeCborFromJson, generateRequest, launchStoredAnnexCRequest,
+    encodeCborFromJson, generateRequest, launchDigitalRequest,
     loadCurrentRequest, openDeeplink, testEndpoint,
   };
   document.addEventListener('click', event => {
@@ -217,13 +217,13 @@ function parseCustomAttributes(raw) {
 // ════════════════════════════════════════════════════════════
 function updateClaimOptions() {
   const docType = document.getElementById('doc-type').value;
-  const isAnnexC = state.activeProtocol === 'annex_c';
+  const isDigital = state.activeProtocol !== 'mdoc';
   const isMdl = docType === 'org.iso.18013.5.1.mDL';
   const includeMdl = document.getElementById('include-mdl');
-  const mdlEnabled = isMdl || (!isAnnexC && includeMdl.checked);
+  const mdlEnabled = isMdl || (!isDigital && includeMdl.checked);
   document.getElementById('photoid-options').hidden = isMdl;
-  document.getElementById('mdl-options').hidden = isAnnexC && !isMdl;
-  document.getElementById('include-mdl-label').hidden = isAnnexC || isMdl;
+  document.getElementById('mdl-options').hidden = isDigital && !isMdl;
+  document.getElementById('include-mdl-label').hidden = isDigital || isMdl;
   document.getElementById('custom-mdl-attributes').disabled = !mdlEnabled;
   document.getElementById('custom-photoid-row').hidden = isMdl;
   document.getElementById('custom-mdl-row').hidden = !mdlEnabled;
@@ -235,33 +235,38 @@ function updateClaimOptions() {
 
 function updateProtocolModeUi() {
   state.activeProtocol = document.getElementById('protocol-mode').value;
-  const isAnnexC = state.activeProtocol === 'annex_c';
+  const isDigital = state.activeProtocol !== 'mdoc';
   const docType = document.getElementById('doc-type');
-  docType.querySelector('[value="custom"]').disabled = isAnnexC;
-  if (isAnnexC && docType.value === 'custom') docType.selectedIndex = 0;
-  document.getElementById('request-url-label').textContent = isAnnexC ? 'Response URL' : 'Wallet transfer URL';
-  document.getElementById('transport-card-title').textContent = isAnnexC ? 'Digital Credentials API' : 'Wallet presentment';
-  document.getElementById('generate-btn').textContent = isAnnexC ? 'Generate Annex C request' : 'Generate QR request';
+  docType.querySelector('[value="custom"]').disabled = isDigital;
+  if (isDigital && docType.value === 'custom') docType.selectedIndex = 0;
+  document.getElementById('verifier-id-row').hidden = state.activeProtocol === 'openid4vp';
+  document.getElementById('request-url-label').textContent = isDigital ? 'Response URL' : 'Wallet transfer URL';
+  document.getElementById('transport-card-title').textContent = isDigital ? 'Digital Credentials API' : 'Wallet presentment';
+  document.getElementById('generate-btn').textContent = {
+    mdoc: 'Generate QR request',
+    annex_c: 'Generate Annex C request',
+    openid4vp: 'Generate OpenID4VP request',
+  }[state.activeProtocol];
   document.getElementById('endpoint-bar-url').value = `${window.location.origin}/health`;
   document.getElementById('endpoint-status').textContent = '';
   document.getElementById('endpoint-status').style.color = 'var(--text3)';
   updateClaimOptions();
-  resetTransportPanel(isAnnexC);
+  resetTransportPanel(isDigital);
 }
 
-function resetTransportPanel(isAnnexC) {
+function resetTransportPanel(isDigital) {
   stopSessionPolling();
-  state.annexCAbort?.abort();
-  state.annexCAbort = null;
+  state.digitalAbort?.abort();
+  state.digitalAbort = null;
   state.session = null;
   state.transportValue = null;
   state.readerEngagementBytes = null;
-  state.annexCDebug = null;
+  state.digitalDebug = null;
   state.mdocUri = null;
   document.getElementById('request-url').value = '';
-  document.getElementById('qr-box').hidden = isAnnexC;
-  document.getElementById('qr-container').hidden = isAnnexC;
-  document.getElementById('annexc-debug-card').hidden = !isAnnexC;
+  document.getElementById('qr-box').hidden = isDigital;
+  document.getElementById('qr-container').hidden = isDigital;
+  document.getElementById('dc-debug-card').hidden = !isDigital;
   document.getElementById('qr-box').innerHTML = '<p class="placeholder">Generate a request to show its QR code.</p>';
   document.getElementById('dc-launch-panel').hidden = true;
   document.getElementById('launch-dcapi-btn').disabled = false;
@@ -269,15 +274,15 @@ function resetTransportPanel(isAnnexC) {
   document.getElementById('download-qr-btn').style.display = 'none';
   document.getElementById('copy-uri-btn').style.display = 'none';
   const deepLink = document.getElementById('open-deeplink');
-  deepLink.style.display = isAnnexC ? 'none' : 'inline-flex';
+  deepLink.style.display = isDigital ? 'none' : 'inline-flex';
   deepLink.removeAttribute('href');
-  const copyLabel = isAnnexC ? 'Copy JSON' : 'Copy URI';
+  const copyLabel = isDigital ? 'Copy JSON' : 'Copy URI';
   document.getElementById('copy-uri-btn').textContent = copyLabel;
-  document.getElementById('transport-value-label').textContent = isAnnexC ? 'Request JSON' : 'mdoc:// URI';
+  document.getElementById('transport-value-label').textContent = isDigital ? 'Request JSON' : 'mdoc:// URI';
   document.getElementById('request-summary').textContent = 'No request generated yet.';
   updateSessionTable(null);
   setWalletResponseState('idle', 'Generate a request to receive a wallet response.');
-  renderAnnexCDebug();
+  renderDigitalDebug();
 }
 
 function canUseDigitalCredentialsApi() {
@@ -285,22 +290,23 @@ function canUseDigitalCredentialsApi() {
     && typeof navigator.credentials?.get === 'function';
 }
 
-function allowsMdocProtocol() {
+function allowsDigitalProtocol(protocol) {
   if (typeof window.DigitalCredential === 'undefined') return false;
   if (typeof window.DigitalCredential.userAgentAllowsProtocol !== 'function') return true;
   try {
-    return window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
+    return window.DigitalCredential.userAgentAllowsProtocol(protocol);
   } catch (_err) {
     return false;
   }
 }
 
-function currentAnnexCEnvironment() {
+function currentDigitalEnvironment() {
+  const protocol = state.session?.request.requests[0].protocol;
   let protocolAllowed = null;
   let allowsError = null;
-  if (typeof window.DigitalCredential !== 'undefined' && typeof window.DigitalCredential.userAgentAllowsProtocol === 'function') {
+  if (protocol && typeof window.DigitalCredential?.userAgentAllowsProtocol === 'function') {
     try {
-      protocolAllowed = window.DigitalCredential.userAgentAllowsProtocol('org-iso-mdoc');
+      protocolAllowed = window.DigitalCredential.userAgentAllowsProtocol(protocol);
     } catch (err) {
       allowsError = err && typeof err.message === 'string' ? err.message : String(err);
     }
@@ -317,39 +323,40 @@ function currentAnnexCEnvironment() {
     digitalCredentialPresent: typeof window.DigitalCredential !== 'undefined',
     credentialsGetPresent: typeof navigator.credentials?.get === 'function',
     userAgentAllowsProtocolPresent: typeof window.DigitalCredential?.userAgentAllowsProtocol === 'function',
-    orgIsoMdocAllowed: protocolAllowed,
-    orgIsoMdocAllowedError: allowsError,
+    protocol,
+    protocolAllowed,
+    protocolCheckError: allowsError,
   };
 }
 
-function updateAnnexCDebug(patch = {}, phase = null) {
-  const existing = state.annexCDebug || {};
-  state.annexCDebug = {
+function updateDigitalDebug(patch = {}, phase = null) {
+  const existing = state.digitalDebug || {};
+  state.digitalDebug = {
     ...existing,
     ...patch,
     environment: {
       ...(existing.environment || {}),
-      ...currentAnnexCEnvironment(),
+      ...currentDigitalEnvironment(),
       ...(patch.environment || {}),
     },
   };
   if (phase) {
-    state.annexCDebug.phase = phase;
+    state.digitalDebug.phase = phase;
   }
-  renderAnnexCDebug();
+  renderDigitalDebug();
 }
 
-function renderAnnexCDebug() {
-  const badge = document.getElementById('annexc-debug-badge');
-  const panel = document.getElementById('annexc-debug-panel');
-  const debug = state.annexCDebug;
+function renderDigitalDebug() {
+  const badge = document.getElementById('dc-debug-badge');
+  const panel = document.getElementById('dc-debug-panel');
+  const debug = state.digitalDebug;
   if (!debug) {
     badge.className = 'badge info';
     badge.textContent = 'idle';
     panel.innerHTML = `
       <div class="empty-state">
         <div class="icon">⌁</div>
-        <p>Generate an Annex C request to capture environment and request diagnostics</p>
+        <p>Generate a request to see browser and protocol diagnostics.</p>
       </div>
     `;
     return;
@@ -376,7 +383,7 @@ function renderAnnexCDebug() {
   `).join('') || `
     <div class="empty-state">
       <div class="icon">⌁</div>
-      <p>No Annex C diagnostics captured yet</p>
+      <p>No Digital Credentials diagnostics captured yet</p>
     </div>
   `;
 }
@@ -393,21 +400,22 @@ function authorization(session) {
   return { Authorization: `Bearer ${session.access_token}` };
 }
 
-async function launchStoredAnnexCRequest() {
+async function launchDigitalRequest() {
   const session = state.session;
-  if (!session?.request || state.annexCAbort) return;
+  if (!session?.request || state.digitalAbort) return;
   if (session.expires_at * 1000 <= Date.now()) {
     setWalletResponseState('error', 'This request expired. Generate a new request.');
     return;
   }
-  if (!canUseDigitalCredentialsApi() || !allowsMdocProtocol()) {
-    setWalletResponseState('error', 'This browser cannot launch org-iso-mdoc. Use a supported browser over HTTPS.');
+  const protocol = session.request.requests[0].protocol;
+  if (!canUseDigitalCredentialsApi() || !allowsDigitalProtocol(protocol)) {
+    setWalletResponseState('error', `This browser cannot launch ${protocol}. Use a supported browser over HTTPS.`);
     return;
   }
 
   const launch = document.getElementById('launch-dcapi-btn');
   const controller = new AbortController();
-  state.annexCAbort = controller;
+  state.digitalAbort = controller;
   launch.disabled = true;
   setWalletResponseState('waiting', 'Waiting for the wallet.');
   try {
@@ -417,7 +425,7 @@ async function launchStoredAnnexCRequest() {
       signal: controller.signal,
     });
     if (state.session !== session) return;
-    if (credential?.protocol !== 'org-iso-mdoc' || typeof credential.data?.response !== 'string') {
+    if (credential?.protocol !== protocol || typeof credential.data?.response !== 'string') {
       throw new Error('The wallet returned an unexpected Digital Credentials response.');
     }
     setWalletResponseState('waiting', 'Verifying the wallet response.');
@@ -430,16 +438,16 @@ async function launchStoredAnnexCRequest() {
     const data = await apiJson(response, 'The verifier rejected the wallet response.');
     if (state.session !== session) return;
     const phase = data.validation?.issuer_auth === 'verified' ? 'verified' : 'inspected';
-    updateAnnexCDebug({lastError: null, lastResult: data.validation}, phase);
+    updateDigitalDebug({lastError: null, lastResult: data.validation}, phase);
     showWalletResponse(data);
     document.getElementById('dc-launch-panel').hidden = true;
   } catch (error) {
     if (state.session !== session) return;
     setWalletResponseState('error', error.message || 'Wallet presentation was interrupted.');
-    updateAnnexCDebug({lastError: {name: error.name, message: error.message}}, 'error');
+    updateDigitalDebug({lastError: {name: error.name, message: error.message}}, 'error');
   } finally {
     if (state.session === session) {
-      state.annexCAbort = null;
+      state.digitalAbort = null;
       launch.disabled = false;
     }
   }
@@ -449,12 +457,13 @@ async function generateRequest() {
   const button = document.getElementById('generate-btn');
   if (button.disabled) return;
   const protocolMode = document.getElementById('protocol-mode');
-  const annex = state.activeProtocol === 'annex_c';
+  const isDigital = state.activeProtocol !== 'mdoc';
+  const isOpenId4Vp = state.activeProtocol === 'openid4vp';
   const originalLabel = button.textContent;
   const selectedType = document.getElementById('doc-type').value;
   const docType = selectedType === 'custom' ? document.getElementById('custom-doc-type').value.trim() : selectedType;
   const mdlSelected = docType === 'org.iso.18013.5.1.mDL';
-  const includeMdl = !annex && document.getElementById('include-mdl').checked && !mdlSelected;
+  const includeMdl = !isDigital && document.getElementById('include-mdl').checked && !mdlSelected;
   const field = id => document.getElementById(id).value.trim();
   const config = {
     doc_type: docType,
@@ -476,18 +485,18 @@ async function generateRequest() {
   button.disabled = true;
   protocolMode.disabled = true;
   button.textContent = 'Generating…';
-  resetTransportPanel(annex);
+  resetTransportPanel(isDigital);
   setStatus('Generating', 'var(--amber)');
   try {
     if (!docType || !requestedNamespaces.length) throw new Error('Choose a document type and at least one claim.');
-    const response = await fetch(annex ? '/dc/session' : '/mdoc/session', {
+    const response = await fetch(isDigital ? '/dc/session' : '/mdoc/session', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(config),
+      body: JSON.stringify(isOpenId4Vp ? {...config, protocol: 'openid4vp-v1-unsigned'} : config),
     });
     const session = await apiJson(response, 'Could not create a verifier session.');
     state.session = session;
-    const endpoint = annex ? session.response_url : session.request_url;
+    const endpoint = isDigital ? session.response_url : session.request_url;
     switchTab('qr');
     document.getElementById('request-url').value = endpoint;
 
@@ -497,14 +506,18 @@ async function generateRequest() {
     } else if (!session.issuer_trust_configured) {
       notes.push('Issuer trust is not configured. Obtain the issuer CA before verifying a response.');
     }
-    if (annex) {
+    if (isDigital) {
       const data = session.request.requests[0].data;
-      state.readerEngagementBytes = base64UrlToBytes(data.deviceRequest);
+      if (!isOpenId4Vp) state.readerEngagementBytes = base64UrlToBytes(data.deviceRequest);
       state.transportValue = JSON.stringify(session.request, null, 2);
       document.getElementById('qr-container').hidden = false;
       document.getElementById('dc-launch-panel').hidden = false;
-      if (!session.signed_request) notes.push('Unsigned request. Wallets that require reader authentication need a configured reader certificate.');
-      updateAnnexCDebug({
+      if (isOpenId4Vp) {
+        notes.push('OpenID4VP uses an unsigned request with an encrypted response. Use a wallet that accepts this profile.');
+      } else if (!session.signed_request) {
+        notes.push('Unsigned request. Wallets that require reader authentication need a configured reader certificate.');
+      }
+      updateDigitalDebug({
         session: {expiresAt: session.expires_at, signedRequest: session.signed_request},
         lastResult: {stage: 'session_created'},
       }, 'ready');
@@ -524,11 +537,13 @@ async function generateRequest() {
     document.getElementById('mdoc-uri-panel').style.display = 'block';
     document.getElementById('copy-uri-btn').style.display = 'inline-flex';
     renderRequestSummary({
-      docType, requestUrl: endpoint, verifierId: config.verifier_id, requestedNamespaces,
-      size: state.readerEngagementBytes.length, annex, expiresAt: session.expires_at, notes,
+      docType, requestUrl: endpoint, verifierId: isOpenId4Vp ? null : config.verifier_id, requestedNamespaces,
+      size: state.readerEngagementBytes?.length ?? new TextEncoder().encode(state.transportValue).length,
+      sizeLabel: isOpenId4Vp ? 'OpenID4VP request JSON' : isDigital ? 'DeviceRequest' : 'ReaderEngagement',
+      isDigital, expiresAt: session.expires_at, notes,
     });
     updateSessionTable({docType, endpoint, 'session id': session.session_id,
-      ...(annex ? {'request nonce': session.request_nonce_hex} : {})});
+      ...(isDigital ? {'request nonce': session.request_nonce ?? session.request_nonce_hex} : {})});
     setStatus('Request ready', 'var(--green)');
     if (matchMedia('(max-width: 820px)').matches) {
       document.getElementById('presentment-card').scrollIntoView({block: 'start'});
@@ -576,16 +591,16 @@ function openDeeplink(e) {
 // ════════════════════════════════════════════════════════════
 // Request summary renderer
 // ════════════════════════════════════════════════════════════
-function renderRequestSummary({docType, requestUrl, verifierId, requestedNamespaces, size, annex, expiresAt, notes}) {
+function renderRequestSummary({docType, requestUrl, verifierId, requestedNamespaces, size, sizeLabel, isDigital, expiresAt, notes}) {
   document.getElementById('request-summary').innerHTML = `
     <table class="field-table">
       <tr><td>Document type</td><td>${escHtml(docType)}</td></tr>
-      <tr><td>${annex ? 'Response URL' : 'Transfer URL'}</td><td>${escHtml(requestUrl)}</td></tr>
-      <tr><td>Verifier ID</td><td>${escHtml(verifierId)}</td></tr>
+      <tr><td>${isDigital ? 'Response URL' : 'Transfer URL'}</td><td>${escHtml(requestUrl)}</td></tr>
+      ${verifierId === null ? '' : `<tr><td>Verifier ID</td><td>${escHtml(verifierId)}</td></tr>`}
       ${requestedNamespaces.map(({name, elements}) => `
         <tr><td>${escHtml(name)}</td><td>${elements.map(element => `<span class="badge info">${escHtml(element)}</span>`).join(' ')}</td></tr>
       `).join('')}
-      <tr><td>${annex ? 'DeviceRequest' : 'ReaderEngagement'}</td><td>${size} bytes</td></tr>
+      <tr><td>${sizeLabel}</td><td>${size} bytes</td></tr>
       <tr><td>Expires</td><td>${escHtml(new Date(expiresAt * 1000).toLocaleTimeString())}</td></tr>
     </table>
     ${notes.map(note => `<p class="request-note">${escHtml(note)}</p>`).join('')}`;
@@ -596,7 +611,8 @@ function renderRequestSummary({docType, requestUrl, verifierId, requestedNamespa
 // ════════════════════════════════════════════════════════════
 function loadCurrentRequest() {
   if (!state.readerEngagementBytes) {
-    log('warn', 'No request generated yet'); return;
+    log('warn', state.transportValue ? 'This request uses JSON. View it in Presentment.' : 'No request generated yet');
+    return;
   }
   const hex = Array.from(state.readerEngagementBytes).map(b => b.toString(16).padStart(2,'0')).join('');
   document.getElementById('cbor-input').value = hex;
@@ -906,7 +922,7 @@ async function copyCurrentTransportValue() {
   if (!state.transportValue) return;
   try {
     await navigator.clipboard.writeText(state.transportValue);
-    log('ok', state.activeProtocol === 'annex_c' ? 'Request JSON copied' : 'URI copied');
+    log('ok', state.activeProtocol === 'mdoc' ? 'URI copied' : 'Request JSON copied');
   } catch {
     log('warn', 'Clipboard access failed. Select the request text to copy it manually.');
   }
